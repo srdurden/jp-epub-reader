@@ -52,16 +52,55 @@
     .book-title { margin: 0 0 4px; font-size: 1rem; }
     .meta { margin: 2px 0; color: var(--muted); font-size: 0.85rem; }
     .empty { text-align: center; padding: 32px 12px; color: var(--muted); }
-    .reader-shell { display: grid; gap: 10px; }
+    .reader-shell { display: grid; gap: 12px; }
+    .reader-card {
+      background: color-mix(in srgb, var(--surface) 94%, #e5e7eb 6%);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 12px 14px;
+    }
+    .reader-top {
+      display: grid;
+      gap: 12px;
+      align-items: center;
+    }
+    .reader-headline {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .icon-btn {
+      border: none;
+      background: transparent;
+      color: var(--text);
+      padding: 6px;
+      border-radius: 10px;
+      font-size: 1.2rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .icon-btn:hover { background: color-mix(in srgb, var(--border) 55%, transparent); }
+    .reader-progress {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 10px;
+    }
+    .reader-progress input[type="range"] {
+      width: 100%;
+      padding: 0;
+      accent-color: #16a34a;
+    }
+    .reader-content-wrap { position: relative; }
     .reader-content {
       min-height: 58vh;
-      max-height: 65vh;
+      max-height: 67vh;
       overflow: auto;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      background: var(--surface);
-      line-height: 1.8;
+      border: 1px solid transparent;
+      border-radius: 22px;
+      padding: 18px 20px 10px;
+      background: color-mix(in srgb, var(--surface) 92%, #edf1f7 8%);
+      line-height: 1.85;
     }
     .reader-content iframe { width: 100%; min-height: 56vh; border: 0; }
     .sentence-box { font-size: 1.35em; line-height: 1.9; white-space: pre-wrap; }
@@ -78,14 +117,12 @@
       border-bottom: 1px solid transparent;
     }
     .token.clickable { cursor: pointer; }
-    .token.jp { border-bottom-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+    .token.jp.unknown-word { border-bottom: 2px solid #60a5fa; }
+    .token.jp.known-learning { background: #fef08a; }
+    .token.jp.known-level-5 { border-bottom-color: transparent; background: transparent; }
     .token.punct { opacity: 0.9; }
     .segmented-line.compact .token { padding: 0; border-bottom-color: transparent; }
-    .token.known-level-1 { border-bottom-color: color-mix(in srgb, #ef4444 45%, transparent); }
-    .token.known-level-2 { border-bottom-color: color-mix(in srgb, #f97316 45%, transparent); }
-    .token.known-level-3 { border-bottom-color: color-mix(in srgb, #f59e0b 45%, transparent); }
-    .token.known-level-4 { border-bottom-color: color-mix(in srgb, #22c55e 45%, transparent); }
-    .token.known-level-5 { border-bottom-color: color-mix(in srgb, #16a34a 65%, transparent); }
+    .token.known-level-1, .token.known-level-2, .token.known-level-3, .token.known-level-4 { border-bottom-color: transparent; }
     .reader-content.with-panel { position: relative; padding-bottom: 220px; }
     .token-panel {
       position: sticky;
@@ -135,6 +172,35 @@
     .meanings-list li { margin: 2px 0; color: var(--muted); }
     .status { color: var(--muted); font-size: 0.9rem; }
     .hidden { display: none !important; }
+    .reader-bottom-nav {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .reader-bottom-nav button {
+      display: grid;
+      place-items: center;
+      gap: 4px;
+      padding: 10px 8px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 95%, #eef2f8 5%);
+      font-size: 0.84rem;
+    }
+    .sentence-hero {
+      display: grid;
+      place-items: center;
+      padding: 8px 0 18px;
+    }
+    .sentence-hero .play-main {
+      width: 96px;
+      height: 96px;
+      border-radius: 999px;
+      font-size: 2rem;
+      border: 2px solid color-mix(in srgb, var(--text) 70%, transparent);
+      background: transparent;
+    }
   </style>
 </head>
 <body>
@@ -747,8 +813,10 @@
       const interactive = isInteractiveToken(token);
       const identity = interactive ? getTokenIdentity(token) : null;
       const knownLevel = identity ? state.vocabMap.get(identity.vocabKey)?.familiarityLevel : null;
+      const learningClass = knownLevel >= 1 && knownLevel <= 4 ? 'known-learning' : '';
+      const unknownClass = interactive && !knownLevel ? 'unknown-word' : '';
       return [
-        `class="token ${token.isJapanese ? 'jp' : ''} ${token.pos === 'punct' ? 'punct' : ''} ${interactive ? 'clickable' : ''} ${knownLevel ? `known-level-${knownLevel}` : ''} ${state.settings.tokenDebug ? 'dbg' : ''}"`,
+        `class="token ${token.isJapanese ? 'jp' : ''} ${token.pos === 'punct' ? 'punct' : ''} ${interactive ? 'clickable' : ''} ${learningClass} ${unknownClass} ${knownLevel ? `known-level-${knownLevel}` : ''} ${state.settings.tokenDebug ? 'dbg' : ''}"`,
         `data-token-id="${escapeHtml(token.id)}"`,
         `data-section-index="${token.sectionIndex}"`,
         `data-sentence-index="${token.sentenceIndex}"`,
@@ -1627,9 +1695,13 @@
         ? renderSegmentedSentence(tokenized, { segmented: state.settings.showSegmentation })
         : escapeHtml(sentence);
       return `
+        <div class="sentence-hero">
+          <button id="playSentenceBtn" class="play-main" title="Reproducir oración">▶</button>
+        </div>
         <div class="sentence-box">${sentenceHtml}</div>
         <p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>
         <p class="status">Frase ${Math.min(idx + 1, Math.max(sentences.length, 1))} de ${Math.max(sentences.length, 1)} en esta sección.</p>
+        <button id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;">Traducir oración</button>
         <div id="tokenPanelHost"></div>
       `;
     }
@@ -1642,23 +1714,21 @@
 
       app.innerHTML = `
         <div class="reader-shell">
-          <div class="card">
-            <div class="toolbar">
-              <button id="backBtn">← Biblioteca</button>
-              <button id="openVocabReaderBtn">Vocabulario</button>
-              <strong>${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</strong>
-              <span class="status">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</span>
-              <div class="spacer"></div>
-              <label>Tema
-                <select id="themeSelect"><option value="light">Claro</option><option value="dark">Oscuro</option></select>
-              </label>
-              <label>Fuente
-                <input id="fontSize" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
-              </label>
+          <div class="reader-card">
+            <div class="reader-top">
+              <div class="reader-progress">
+                <button id="backBtn" class="icon-btn" title="Volver a biblioteca">✕</button>
+                <input id="sectionProgress" type="range" min="0" max="${Math.max(state.sections.length - 1, 0)}" value="${state.currentSpineIndex}" />
+                <button id="openReaderMenuBtn" class="icon-btn" title="Más opciones">⋯</button>
+              </div>
+              <div class="reader-headline">
+                <strong>${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</strong>
+                <span class="status">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</span>
+                <span class="status">Progreso aprox.: ${percent}%</span>
+              </div>
             </div>
-            <div class="toolbar">
-              <button id="prevBtn">Anterior</button>
-              <button id="nextBtn" class="primary">Siguiente</button>
+            <div id="readerMenu" class="toolbar hidden">
+              <button id="openVocabReaderBtn">Vocabulario</button>
               <label>Modo
                 <select id="modeSelect"><option value="page">Página</option><option value="sentence">Frase</option></select>
               </label>
@@ -1673,10 +1743,23 @@
                 <input id="tokenDebugToggle" type="checkbox" ${state.settings.tokenDebug ? 'checked' : ''} />
                 Debug tokens
               </label>
-              <span class="status">Progreso aprox.: ${percent}% (${state.currentSpineIndex + 1}/${state.sections.length})</span>
+              <label>Tema
+                <select id="themeSelect"><option value="light">Claro</option><option value="dark">Oscuro</option></select>
+              </label>
+              <label>Fuente
+                <input id="fontSize" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
+              </label>
             </div>
           </div>
-          <div class="reader-content">${state.readingMode === 'page' ? renderPageMode(section) : renderSentenceMode(section)}</div>
+          <div class="reader-content-wrap">
+            <div class="reader-content">${state.readingMode === 'page' ? renderPageMode(section) : renderSentenceMode(section)}</div>
+          </div>
+          <div class="reader-bottom-nav">
+            <button id="prevBtn">◀<span>Anterior</span></button>
+            <button id="nextBtn">▶<span>Siguiente</span></button>
+            <button id="openVocabBottomBtn">☰<span>Vocabulario</span></button>
+            <button id="toggleModeBtn">⇄<span>${state.readingMode === 'page' ? 'Frase' : 'Página'}</span></button>
+          </div>
         </div>
       `;
 
@@ -1690,12 +1773,27 @@
         await refreshBooks();
         renderLibraryView();
       });
+      $('#openReaderMenuBtn').addEventListener('click', () => $('#readerMenu')?.classList.toggle('hidden'));
+      $('#sectionProgress').addEventListener('input', async (e) => {
+        state.currentSpineIndex = Number(e.target.value);
+        state.currentSentenceIndex = 0;
+        await persistCurrentProgress();
+        renderReaderView();
+      });
       $('#openVocabReaderBtn').addEventListener('click', async () => {
+        await persistCurrentProgress();
+        renderVocabularyView();
+      });
+      $('#openVocabBottomBtn').addEventListener('click', async () => {
         await persistCurrentProgress();
         renderVocabularyView();
       });
       $('#prevBtn').addEventListener('click', prevStep);
       $('#nextBtn').addEventListener('click', nextStep);
+      $('#toggleModeBtn').addEventListener('click', () => {
+        const targetMode = state.readingMode === 'page' ? 'sentence' : 'page';
+        setReadingMode(targetMode);
+      });
       $('#modeSelect').addEventListener('change', (e) => setReadingMode(e.target.value));
       $('#sectionSelect').addEventListener('change', async (e) => {
         state.currentSpineIndex = Number(e.target.value);
@@ -1721,6 +1819,8 @@
       });
 
       if (state.readingMode === 'sentence') {
+        $('#playSentenceBtn')?.addEventListener('click', () => nextStep());
+        $('#translateSentenceBtn')?.addEventListener('click', () => alert('Traducción rápida: función placeholder para conectar con tu flujo actual.'));
         $('.sentence-box')?.addEventListener('click', async (e) => {
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
           if (!tokenEl) return;
