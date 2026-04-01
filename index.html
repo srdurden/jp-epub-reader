@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JP EPUB Reader - Fase 2</title>
+  <title>JP EPUB Reader - Fase 3</title>
   <style>
     :root {
       --bg: #f5f7fb;
@@ -71,13 +71,45 @@
       gap: 0.12em;
       align-items: baseline;
     }
+    .segmented-line.compact { gap: 0; }
     .token {
       border-radius: 4px;
       padding: 0 0.05em;
       border-bottom: 1px solid transparent;
     }
+    .token.clickable { cursor: pointer; }
     .token.jp { border-bottom-color: color-mix(in srgb, var(--primary) 40%, transparent); }
     .token.punct { opacity: 0.9; }
+    .segmented-line.compact .token { padding: 0; border-bottom-color: transparent; }
+    .token.known-level-1 { border-bottom-color: color-mix(in srgb, #ef4444 45%, transparent); }
+    .token.known-level-2 { border-bottom-color: color-mix(in srgb, #f97316 45%, transparent); }
+    .token.known-level-3 { border-bottom-color: color-mix(in srgb, #f59e0b 45%, transparent); }
+    .token.known-level-4 { border-bottom-color: color-mix(in srgb, #22c55e 45%, transparent); }
+    .token.known-level-5 { border-bottom-color: color-mix(in srgb, #16a34a 65%, transparent); }
+    .reader-content.with-panel { position: relative; padding-bottom: 220px; }
+    .token-panel {
+      position: sticky;
+      bottom: 0;
+      margin-top: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      padding: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      z-index: 3;
+    }
+    .token-panel h3 { margin: 0 0 10px; font-size: 1rem; }
+    .token-grid { display: grid; gap: 6px; grid-template-columns: minmax(120px, 170px) 1fr; }
+    .token-grid .k { color: var(--muted); font-size: 0.9rem; }
+    .token-grid .v { font-weight: 500; word-break: break-word; }
+    .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
+    .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
+    .vocab-list { display: grid; gap: 10px; }
+    .vocab-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface); }
+    .vocab-main { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .badge { border: 1px solid var(--border); border-radius: 999px; font-size: 0.78rem; padding: 2px 8px; color: var(--muted); }
+    .badge.level { color: var(--text); }
     .token.dbg::after {
       content: attr(data-debug);
       display: block;
@@ -96,7 +128,7 @@
 
   <script>
     /*
-      JP EPUB Reader - Fase 2 (offline-first)
+      JP EPUB Reader - Fase 3 (offline-first)
       Arquitectura (todo autocontenido en este archivo):
       1) Config / constantes
       2) Utilidades generales
@@ -105,26 +137,29 @@
       5) Extracción de metadatos
       6) Lógica del lector (modo página + modo frase)
       7) [NUEVO Fase 2] Normalización + tokenización japonesa + render de tokens
-      8) Renderizado UI + Router
-      9) Preferencias + Service Worker
+      8) [NUEVO Fase 3] Vocabulario (modelo + interacción + panel + vista)
+      9) Renderizado UI + Router
+      10) Preferencias + Service Worker
 
       Limitaciones conocidas Fase 1:
       - Parser EPUB minimalista: soporta ZIP método Stored (0) y Deflate (8).
       - Algunos EPUB complejos pueden renderizar estilos/recursos de forma parcial.
       - Segmentación de frases heurística, prioriza robustez.
-      - Fase 2 agrega tokenización y segmentación visual opcional (sin popup ni clic funcional).
+      - Fase 2 agrega tokenización y segmentación visual opcional.
+      - Fase 3 agrega interacción con tokens, nivel 1..5 y persistencia de vocabulario (sin diccionario).
     */
 
     // =========================
     // Config / constantes
     // =========================
     const DB_NAME = 'jp_epub_reader_db';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
     const STORES = {
       books: 'books',
       bookFiles: 'bookFiles',
       progress: 'progress',
-      settings: 'settings'
+      settings: 'settings',
+      vocabEntries: 'vocabEntries'
     };
     const SETTINGS_KEY = 'app_settings';
     const DEFAULT_SETTINGS = {
@@ -146,7 +181,17 @@
       sections: [],
       sectionSentencesCache: new Map(),
       sentenceTokenCache: new Map(),
-      settings: { ...DEFAULT_SETTINGS }
+      settings: { ...DEFAULT_SETTINGS },
+      vocabMap: new Map(),
+      tokenSelection: {
+        token: null,
+        entry: null,
+        draftLevel: null
+      },
+      vocabFilters: {
+        query: '',
+        level: 'all'
+      }
     };
 
     // =========================
@@ -210,6 +255,12 @@
           if (!db.objectStoreNames.contains(STORES.bookFiles)) db.createObjectStore(STORES.bookFiles, { keyPath: 'bookId' });
           if (!db.objectStoreNames.contains(STORES.progress)) db.createObjectStore(STORES.progress, { keyPath: 'bookId' });
           if (!db.objectStoreNames.contains(STORES.settings)) db.createObjectStore(STORES.settings, { keyPath: 'id' });
+          if (!db.objectStoreNames.contains(STORES.vocabEntries)) {
+            const vocabStore = db.createObjectStore(STORES.vocabEntries, { keyPath: 'id' });
+            vocabStore.createIndex('vocabKey', 'vocabKey', { unique: true });
+            vocabStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+            vocabStore.createIndex('familiarityLevel', 'familiarityLevel', { unique: false });
+          }
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -253,6 +304,16 @@
         tx.objectStore(storeName).delete(key);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function dbGetByIndex(storeName, indexName, key) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).index(indexName).get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
       });
     }
 
@@ -599,12 +660,17 @@
 
     function attachTokenMetadata(token) {
       const debug = `${token.pos}${token.baseForm ? ` · ${token.baseForm}` : ''}`;
+      const interactive = isInteractiveToken(token);
+      const identity = interactive ? getTokenIdentity(token) : null;
+      const knownLevel = identity ? state.vocabMap.get(identity.vocabKey)?.familiarityLevel : null;
       return [
-        `class="token ${token.isJapanese ? 'jp' : ''} ${token.pos === 'punct' ? 'punct' : ''} ${state.settings.tokenDebug ? 'dbg' : ''}"`,
+        `class="token ${token.isJapanese ? 'jp' : ''} ${token.pos === 'punct' ? 'punct' : ''} ${interactive ? 'clickable' : ''} ${knownLevel ? `known-level-${knownLevel}` : ''} ${state.settings.tokenDebug ? 'dbg' : ''}"`,
         `data-token-id="${escapeHtml(token.id)}"`,
         `data-section-index="${token.sectionIndex}"`,
         `data-sentence-index="${token.sentenceIndex}"`,
         `data-token-index="${token.tokenIndex}"`,
+        `data-interactive="${interactive ? '1' : '0'}"`,
+        identity ? `data-vocab-key="${escapeHtml(identity.vocabKey)}"` : '',
         `data-surface="${escapeHtml(token.surface)}"`,
         `data-base-form="${escapeHtml(token.baseForm || '')}"`,
         `data-pos="${escapeHtml(token.pos || '')}"`,
@@ -614,15 +680,193 @@
 
     function renderSentenceTokens(tokens, options = {}) {
       const { segmented = false } = options;
-      if (!segmented) return escapeHtml(tokens.map((t) => t.surface).join(''));
-      return `<div class="segmented-line">${
-        tokens.map((token) => `<span ${attachTokenMetadata(token)}>${escapeHtml(token.surface)}</span>`).join('')
+      return `<div class="segmented-line ${segmented ? '' : 'compact'}">${
+        tokens.map((token) => `<span ${renderTokenWithKnowledgeState(token)}>${escapeHtml(token.surface)}</span>`).join('')
       }</div>`;
     }
 
     function renderSegmentedSentence(payload, options = {}) {
       if (!payload?.tokens?.length) return escapeHtml(payload?.sentence || '');
       return renderSentenceTokens(payload.tokens, options);
+    }
+
+    // =========================
+    // [NUEVO Fase 3] Vocabulary data model / deduplicación
+    // =========================
+    function isInteractiveToken(token) {
+      if (!token) return false;
+      if (!token.isJapanese) return false;
+      if (!token.normalizedSurface) return false;
+      return token.tokenType !== 'punct' && token.tokenType !== 'space' && token.tokenType !== 'empty';
+    }
+
+    function buildVocabKey(token) {
+      // Estrategia Fase 3: preferir lemma/baseForm (si hay), fallback a normalizedSurface.
+      // Fase 4 podrá refinar usando datos léxicos más ricos.
+      const lemma = normalizeTokenSurface(token?.baseForm || '');
+      const normalizedSurface = normalizeTokenSurface(token?.normalizedSurface || token?.surface || '');
+      const normalizedKey = lemma || normalizedSurface;
+      return normalizedKey ? `jp:${normalizedKey}` : '';
+    }
+
+    function getTokenIdentity(token) {
+      const normalizedSurface = normalizeTokenSurface(token?.normalizedSurface || token?.surface || '');
+      const vocabKey = buildVocabKey(token);
+      return { vocabKey, normalizedKey: vocabKey.replace(/^jp:/, ''), normalizedSurface };
+    }
+
+    async function loadVocabularyMap() {
+      const entries = await dbGetAll(STORES.vocabEntries);
+      state.vocabMap = new Map(entries.map((entry) => [entry.vocabKey, entry]));
+      return state.vocabMap;
+    }
+
+    async function loadVocabEntryByKey(key) {
+      if (!key) return null;
+      if (state.vocabMap.has(key)) return state.vocabMap.get(key);
+      const entry = await dbGetByIndex(STORES.vocabEntries, 'vocabKey', key);
+      if (entry) state.vocabMap.set(key, entry);
+      return entry;
+    }
+
+    async function upsertVocabEntryFromToken(token, context = {}) {
+      const identity = getTokenIdentity(token);
+      if (!identity.vocabKey) return null;
+      const now = new Date().toISOString();
+      const existing = await loadVocabEntryByKey(identity.vocabKey);
+      const sourceBookIds = new Set(existing?.sourceBookIds || []);
+      if (context.bookId) sourceBookIds.add(context.bookId);
+      const entry = {
+        id: existing?.id || uuid(),
+        vocabKey: identity.vocabKey,
+        normalizedKey: identity.normalizedKey,
+        surface: token.surface || existing?.surface || identity.normalizedSurface,
+        lemma: token.baseForm || existing?.lemma || null,
+        reading: token.reading || existing?.reading || null,
+        pos: token.pos || existing?.pos || null,
+        familiarityLevel: existing?.familiarityLevel ?? null,
+        firstSeenAt: existing?.firstSeenAt || now,
+        lastSeenAt: now,
+        timesClicked: (existing?.timesClicked || 0) + 1,
+        createdAt: existing?.createdAt || now,
+        updatedAt: now,
+        sourceBookIds: [...sourceBookIds]
+      };
+      await dbPut(STORES.vocabEntries, entry);
+      state.vocabMap.set(entry.vocabKey, entry);
+      return entry;
+    }
+
+    async function setTokenFamiliarity(vocabKey, level) {
+      const existing = await loadVocabEntryByKey(vocabKey);
+      if (!existing) return null;
+      const next = {
+        ...existing,
+        familiarityLevel: level == null ? null : Number(level),
+        updatedAt: new Date().toISOString()
+      };
+      await dbPut(STORES.vocabEntries, next);
+      state.vocabMap.set(next.vocabKey, next);
+      return next;
+    }
+
+    // =========================
+    // [NUEVO Fase 3] Token interaction + panel + familiarity rendering
+    // =========================
+    function closeTokenPanel() {
+      state.tokenSelection = { token: null, entry: null, draftLevel: null };
+      const host = $('#tokenPanelHost');
+      if (host) host.innerHTML = '';
+      const readerContent = $('.reader-content');
+      if (readerContent) readerContent.classList.remove('with-panel');
+    }
+
+    function renderTokenWithKnowledgeState(token) {
+      return attachTokenMetadata(token);
+    }
+
+    function renderTokenPanel() {
+      const host = $('#tokenPanelHost');
+      if (!host) return;
+      const { token, entry, draftLevel } = state.tokenSelection;
+      if (!token || !entry) {
+        host.innerHTML = '';
+        return;
+      }
+      host.innerHTML = `
+        <aside class="token-panel" role="dialog" aria-label="Detalle de token">
+          <div class="toolbar" style="margin-bottom: 8px;">
+            <h3>Token seleccionado</h3>
+            <div class="spacer"></div>
+            <button id="closeTokenPanelBtn">Cerrar</button>
+          </div>
+          <div class="token-grid">
+            <span class="k">surface</span><span class="v">${escapeHtml(token.surface || '—')}</span>
+            <span class="k">normalizedSurface</span><span class="v">${escapeHtml(getTokenIdentity(token).normalizedSurface || '—')}</span>
+            <span class="k">lemma/baseForm</span><span class="v">${escapeHtml(token.baseForm || '—')}</span>
+            <span class="k">reading</span><span class="v">${escapeHtml(token.reading || '—')}</span>
+            <span class="k">pos</span><span class="v">${escapeHtml(token.pos || '—')}</span>
+            <span class="k">vocabKey</span><span class="v">${escapeHtml(entry.vocabKey)}</span>
+          </div>
+          <div class="level-picker" aria-label="Nivel de conocimiento">
+            ${[1,2,3,4,5].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
+            <button class="level-btn ${draftLevel == null ? 'active' : ''}" data-level="">Sin valorar</button>
+          </div>
+          <p class="status" style="margin: 8px 0 0;">Clicks: ${entry.timesClicked || 0} · Última vez: ${formatDate(entry.lastSeenAt)}</p>
+        </aside>
+      `;
+      const readerContent = $('.reader-content');
+      if (readerContent) readerContent.classList.add('with-panel');
+      $('#closeTokenPanelBtn')?.addEventListener('click', closeTokenPanel);
+      host.querySelectorAll('[data-level]').forEach((btn) => btn.addEventListener('click', async () => {
+        const rawLevel = btn.dataset.level;
+        const level = rawLevel ? Number(rawLevel) : null;
+        const updated = await setTokenFamiliarity(entry.vocabKey, level);
+        if (!updated) return;
+        state.tokenSelection.entry = updated;
+        state.tokenSelection.draftLevel = updated.familiarityLevel;
+        applyFamiliarityStyles(updated.vocabKey, updated.familiarityLevel);
+        renderTokenPanel();
+      }));
+    }
+
+    function applyFamiliarityStyles(vocabKey, level) {
+      document.querySelectorAll(`[data-vocab-key="${CSS.escape(vocabKey)}"]`).forEach((node) => {
+        for (let i = 1; i <= 5; i++) node.classList.remove(`known-level-${i}`);
+        if (level) node.classList.add(`known-level-${level}`);
+      });
+    }
+
+    async function openTokenPanel(token, context = {}) {
+      if (!isInteractiveToken(token)) return;
+      const entry = await upsertVocabEntryFromToken(token, context);
+      if (!entry) return;
+      state.tokenSelection = {
+        token,
+        entry,
+        draftLevel: entry.familiarityLevel ?? null
+      };
+      renderTokenPanel();
+      applyFamiliarityStyles(entry.vocabKey, entry.familiarityLevel);
+    }
+
+    function getTokenFromElement(el) {
+      if (!el) return null;
+      const surface = el.dataset.surface || '';
+      const tokenType = classifyToken(surface);
+      return {
+        id: el.dataset.tokenId,
+        surface,
+        normalizedSurface: normalizeTokenSurface(surface),
+        baseForm: el.dataset.baseForm || normalizeTokenSurface(surface),
+        pos: el.dataset.pos || tokenType,
+        reading: null,
+        isJapanese: isJapaneseText(surface),
+        tokenType,
+        sectionIndex: Number(el.dataset.sectionIndex),
+        sentenceIndex: Number(el.dataset.sentenceIndex),
+        tokenIndex: Number(el.dataset.tokenIndex)
+      };
     }
 
     // =========================
@@ -670,11 +914,13 @@
     async function setReadingMode(mode) {
       state.readingMode = mode;
       if (mode === 'sentence') state.currentSentenceIndex = 0;
+      closeTokenPanel();
       await persistCurrentProgress();
       renderReaderView();
     }
 
     async function nextStep() {
+      closeTokenPanel();
       if (state.readingMode === 'page') {
         if (state.currentSpineIndex < state.sections.length - 1) state.currentSpineIndex++;
       } else {
@@ -690,6 +936,7 @@
     }
 
     async function prevStep() {
+      closeTokenPanel();
       if (state.readingMode === 'page') {
         if (state.currentSpineIndex > 0) state.currentSpineIndex--;
       } else {
@@ -702,6 +949,84 @@
       }
       await persistCurrentProgress();
       renderReaderView();
+    }
+
+    // =========================
+    // [NUEVO Fase 3] Vocabulary list view
+    // =========================
+    function filterVocabularyEntries(entries, query, levelFilter) {
+      const q = (query || '').trim().toLowerCase();
+      return entries.filter((entry) => {
+        const levelOk = levelFilter === 'all'
+          ? true
+          : String(entry.familiarityLevel ?? 'none') === String(levelFilter);
+        if (!levelOk) return false;
+        if (!q) return true;
+        const haystack = [entry.surface, entry.lemma, entry.reading, entry.normalizedKey].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    async function updateVocabularyEntryLevel(vocabKey, level) {
+      await setTokenFamiliarity(vocabKey, level);
+      await renderVocabularyView();
+    }
+
+    async function renderVocabularyView() {
+      state.route = 'vocabulary';
+      const app = $('#app');
+      const allEntries = [...state.vocabMap.values()].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      const entries = filterVocabularyEntries(allEntries, state.vocabFilters.query, state.vocabFilters.level);
+      app.innerHTML = `
+        <div class="card">
+          <div class="toolbar">
+            <button id="backLibraryBtn">← Biblioteca</button>
+            <h1 style="margin:0;font-size:1.2rem;">🧠 Vocabulario (Fase 3)</h1>
+            <div class="spacer"></div>
+            <input id="vocabSearch" placeholder="Buscar surface / lemma / reading" value="${escapeHtml(state.vocabFilters.query)}" />
+            <label>Nivel
+              <select id="vocabLevelFilter">
+                <option value="all">Todos</option>
+                <option value="none">Sin valorar</option>
+                ${[1,2,3,4,5].map((n) => `<option value="${n}">${n}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+          <p class="status">Entradas: ${entries.length} (total: ${allEntries.length}). Sin diccionario ni traducciones en Fase 3.</p>
+          <div class="vocab-list">
+            ${entries.length ? entries.map((entry) => `
+              <article class="vocab-item">
+                <div class="vocab-main">
+                  <strong>${escapeHtml(entry.surface || entry.normalizedKey)}</strong>
+                  <span class="badge">${escapeHtml(entry.lemma || 'lemma: —')}</span>
+                  <span class="badge">${escapeHtml(entry.reading || 'reading: —')}</span>
+                  <span class="badge">${escapeHtml(entry.pos || 'pos: —')}</span>
+                  <span class="badge level">Nivel: ${entry.familiarityLevel ?? 'Sin valorar'}</span>
+                </div>
+                <p class="meta">Apariciones pulsadas: ${entry.timesClicked || 0} · Primera vez: ${formatDate(entry.firstSeenAt)} · Última actualización: ${formatDate(entry.updatedAt)}</p>
+                <div class="toolbar" style="margin-top: 6px;">
+                  ${[1,2,3,4,5].map((lvl) => `<button data-vocab-level="${lvl}" data-vocab-key="${escapeHtml(entry.vocabKey)}">${lvl}</button>`).join('')}
+                  <button data-vocab-level="" data-vocab-key="${escapeHtml(entry.vocabKey)}">Sin valorar</button>
+                </div>
+              </article>
+            `).join('') : `<div class="empty">Todavía no has seleccionado palabras en el lector.</div>`}
+          </div>
+        </div>
+      `;
+      $('#vocabLevelFilter').value = state.vocabFilters.level;
+      $('#backLibraryBtn').addEventListener('click', renderLibraryView);
+      $('#vocabSearch').addEventListener('input', (e) => {
+        state.vocabFilters.query = e.target.value || '';
+        renderVocabularyView();
+      });
+      $('#vocabLevelFilter').addEventListener('change', (e) => {
+        state.vocabFilters.level = e.target.value;
+        renderVocabularyView();
+      });
+      app.querySelectorAll('[data-vocab-key]').forEach((btn) => btn.addEventListener('click', () => {
+        const level = btn.dataset.vocabLevel ? Number(btn.dataset.vocabLevel) : null;
+        updateVocabularyEntryLevel(btn.dataset.vocabKey, level);
+      }));
     }
 
     // =========================
@@ -724,8 +1049,9 @@
       app.innerHTML = `
         <div class="card">
           <div class="toolbar">
-            <h1 style="margin:0;font-size:1.3rem;">📚 JP EPUB Reader (Fase 2)</h1>
+            <h1 style="margin:0;font-size:1.3rem;">📚 JP EPUB Reader (Fase 3)</h1>
             <div class="spacer"></div>
+            <button id="openVocabBtn">Vocabulario</button>
             <label><span class="hidden">Subir EPUB</span><input id="epubInput" type="file" accept=".epub,application/epub+zip" multiple /></label>
             <button id="toggleTheme" title="Cambiar tema">Tema: ${state.settings.theme === 'dark' ? 'Oscuro' : 'Claro'}</button>
           </div>
@@ -760,6 +1086,7 @@
         await saveSettings({ theme: next });
         renderLibraryView();
       });
+      $('#openVocabBtn').addEventListener('click', renderVocabularyView);
 
       app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
       app.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
@@ -789,6 +1116,7 @@
         <div class="sentence-box">${sentenceHtml}</div>
         <p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>
         <p class="status">Frase ${Math.min(idx + 1, Math.max(sentences.length, 1))} de ${Math.max(sentences.length, 1)} en esta sección.</p>
+        <div id="tokenPanelHost"></div>
       `;
     }
 
@@ -803,6 +1131,7 @@
           <div class="card">
             <div class="toolbar">
               <button id="backBtn">← Biblioteca</button>
+              <button id="openVocabReaderBtn">Vocabulario</button>
               <strong>${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</strong>
               <span class="status">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</span>
               <div class="spacer"></div>
@@ -842,9 +1171,14 @@
       $('#sectionSelect').value = String(state.currentSpineIndex);
 
       $('#backBtn').addEventListener('click', async () => {
+        closeTokenPanel();
         await persistCurrentProgress();
         await refreshBooks();
         renderLibraryView();
+      });
+      $('#openVocabReaderBtn').addEventListener('click', async () => {
+        await persistCurrentProgress();
+        renderVocabularyView();
       });
       $('#prevBtn').addEventListener('click', prevStep);
       $('#nextBtn').addEventListener('click', nextStep);
@@ -871,6 +1205,15 @@
         await saveSettings({ fontSize: Number(e.target.value) });
         renderReaderView();
       });
+
+      if (state.readingMode === 'sentence') {
+        $('.sentence-box')?.addEventListener('click', async (e) => {
+          const tokenEl = e.target.closest('.token[data-interactive="1"]');
+          if (!tokenEl) return;
+          const token = getTokenFromElement(tokenEl);
+          await openTokenPanel(token, { bookId: state.currentBookId });
+        });
+      }
     }
 
     // =========================
@@ -895,6 +1238,7 @@
     (async function init() {
       await loadSettings();
       await refreshBooks();
+      await loadVocabularyMap();
       await registerServiceWorker();
       renderLibraryView();
       if (state.settings.lastOpenedBookId && state.books.some((b) => b.id === state.settings.lastOpenedBookId)) {
@@ -902,9 +1246,9 @@
       }
     })();
 
-    // Punto de extensión futuro (Fase 3+):
-    // Con los data-* de cada token ya es posible identificar token/capítulo/frase.
-    // Aquí se conectará el popup léxico, nivel de conocimiento y diccionario.
+    // Punto de extensión futuro (Fase 4):
+    // El panel de token ya guarda familiaridad y metadatos básicos.
+    // Aquí se podrá conectar lookup de diccionario/definiciones sin romper la base Fase 3.
   </script>
 </body>
 </html>
