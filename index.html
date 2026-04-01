@@ -258,6 +258,40 @@
       height: 225px;
       border-radius: 12px;
     }
+    .book-cover-button {
+      width: 100%;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .book-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+    .segmented-toggle {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px;
+      background: color-mix(in srgb, var(--surface) 95%, #eef2f8 5%);
+      gap: 2px;
+    }
+    .segmented-toggle button {
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      padding: 6px 10px;
+      cursor: pointer;
+      min-width: 70px;
+    }
+    .segmented-toggle button.active {
+      background: var(--primary);
+      color: #fff;
+    }
     .upload-book-tile {
       cursor: pointer;
     }
@@ -550,7 +584,12 @@
 
     async function listBooks() {
       const books = await dbGetAll(STORES.books);
-      return books.sort((a,b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+      return books.sort((a, b) => {
+        const aLastAccess = a.lastOpenedAt ? new Date(a.lastOpenedAt).getTime() : 0;
+        const bLastAccess = b.lastOpenedAt ? new Date(b.lastOpenedAt).getTime() : 0;
+        if (bLastAccess !== aLastAccess) return bLastAccess - aLastAccess;
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      });
     }
 
     async function saveBook(book, fileBlob) {
@@ -1698,7 +1737,7 @@
         <div class="library-shell">
           <div class="library-card">
             <h1 class="library-headline">
-              <span>📚 JP Reader</span>
+              <span>JP Reader</span>
             </h1>
             <div class="library-toolbar">
               <button id="openVocabBtn">Vocabulario</button>
@@ -1706,12 +1745,34 @@
               <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
               <input id="epubInput" class="hidden" type="file" accept=".epub,application/epub+zip" multiple />
               <div class="spacer"></div>
-              <button id="toggleTheme" title="Cambiar tema">Tema: ${state.settings.theme === 'dark' ? 'Oscuro' : 'Claro'}</button>
+              <div id="libraryThemeToggle" class="segmented-toggle" role="group" aria-label="Tema">
+                <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}">Claro</button>
+                <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}">Oscuro</button>
+              </div>
             </div>
             <p class="status" style="margin:10px 0 0;">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</p>
             ${state.dictionaryStatus.importMessage ? `<p class="status">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
           </div>
           <div class="book-shelf">
+            ${state.books.length ? state.books.map((b) => {
+            const pg = progressMap.get(b.id);
+            return `
+              <article class="book-tile">
+                <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
+                  <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title)}" />` : `<div class="cover"></div>`}</div>
+                </button>
+                <div>
+                  <h2 class="book-title">${escapeHtml(b.title || b.fileName)}</h2>
+                  <p class="meta">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
+                  <p class="meta">Importado: ${formatDate(b.createdAt)}</p>
+                  <p class="meta">Último acceso: ${formatDate(b.lastOpenedAt)}</p>
+                  <p class="meta">Progreso: ${pg?.percent != null ? `${pg.percent}% (${pg.readingMode})` : 'Sin iniciar'}</p>
+                  <div class="book-actions">
+                    <button data-delete="${b.id}" class="icon-btn danger" title="Borrar libro" aria-label="Borrar libro">🗑</button>
+                  </div>
+                </div>
+              </article>`;
+          }).join('') : ''}
             <article id="uploadBookTile" class="book-tile upload-book-tile" role="button" tabindex="0" aria-label="Subir EPUB">
               <div class="book-cover-wrap">
                 <button id="uploadBookBtn" class="upload-plus" type="button" aria-label="Subir EPUB">+</button>
@@ -1721,24 +1782,6 @@
                 <p class="meta">Haz clic en + o arrastra un .epub aquí.</p>
               </div>
             </article>
-            ${state.books.length ? state.books.map((b) => {
-            const pg = progressMap.get(b.id);
-            return `
-              <article class="book-tile">
-                <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title)}" />` : `<div class="cover"></div>`}</div>
-                <div>
-                  <h2 class="book-title">${escapeHtml(b.title || b.fileName)}</h2>
-                  <p class="meta">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
-                  <p class="meta">Importado: ${formatDate(b.createdAt)}</p>
-                  <p class="meta">Último acceso: ${formatDate(b.lastOpenedAt)}</p>
-                  <p class="meta">Progreso: ${pg?.percent != null ? `${pg.percent}% (${pg.readingMode})` : 'Sin iniciar'}</p>
-                  <div class="toolbar" style="margin-top:8px;">
-                    <button data-open="${b.id}" class="primary">Abrir</button>
-                    <button data-delete="${b.id}" class="danger">Borrar</button>
-                  </div>
-                </div>
-              </article>`;
-          }).join('') : ''}
           </div>
         </div>`;
 
@@ -1777,11 +1820,10 @@
         await importEpubFiles(files);
       });
 
-      $('#toggleTheme').addEventListener('click', async () => {
-        const next = state.settings.theme === 'dark' ? 'light' : 'dark';
-        await saveSettings({ theme: next });
+      app.querySelectorAll('#libraryThemeToggle [data-theme-option]').forEach((btn) => btn.addEventListener('click', async () => {
+        await saveSettings({ theme: btn.dataset.themeOption });
         renderLibraryView();
-      });
+      }));
       $('#openVocabBtn').addEventListener('click', renderVocabularyView);
 
       app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
@@ -1877,9 +1919,13 @@
                 <input id="tokenDebugToggle" type="checkbox" ${state.settings.tokenDebug ? 'checked' : ''} />
                 Debug tokens
               </label>
-              <label>Tema
-                <select id="themeSelect"><option value="light">Claro</option><option value="dark">Oscuro</option></select>
-              </label>
+              <div>
+                <span class="meta">Tema</span><br />
+                <div id="readerThemeToggle" class="segmented-toggle" role="group" aria-label="Tema">
+                  <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}">Claro</button>
+                  <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}">Oscuro</button>
+                </div>
+              </div>
               <label>Fuente
                 <input id="fontSize" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
               </label>
@@ -1897,7 +1943,6 @@
         </div>
       `;
 
-      $('#themeSelect').value = state.settings.theme;
       $('#modeSelect').value = state.readingMode;
       $('#sectionSelect').value = String(state.currentSpineIndex);
 
@@ -1935,10 +1980,10 @@
         await persistCurrentProgress();
         renderReaderView();
       });
-      $('#themeSelect').addEventListener('change', async (e) => {
-        await saveSettings({ theme: e.target.value });
+      app.querySelectorAll('#readerThemeToggle [data-theme-option]').forEach((btn) => btn.addEventListener('click', async () => {
+        await saveSettings({ theme: btn.dataset.themeOption });
         renderReaderView();
-      });
+      }));
       $('#segmentationToggle').addEventListener('change', async (e) => {
         await saveSettings({ showSegmentation: e.target.checked });
         renderReaderView();
