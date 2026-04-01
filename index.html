@@ -112,30 +112,40 @@
     }
     .segmented-line.compact { gap: 0; }
     .token {
-      border-radius: 4px;
-      padding: 0 0.05em;
+      border-radius: 6px;
+      padding: 0 0.12em;
       border-bottom: 1px solid transparent;
+      transition: background-color 120ms ease;
     }
     .token.clickable { cursor: pointer; }
-    .token.jp.unknown-word { border-bottom: 2px solid #60a5fa; }
-    .token.jp.known-learning { background: #fef08a; }
+    .token.jp.unknown-word { background: #dbeafe; border-bottom-color: transparent; }
+    .token.jp.known-learning { background: #fef08a; border-bottom-color: transparent; }
     .token.jp.known-level-5 { border-bottom-color: transparent; background: transparent; }
     .token.punct { opacity: 0.9; }
-    .segmented-line.compact .token { padding: 0; border-bottom-color: transparent; }
-    .token.known-level-1, .token.known-level-2, .token.known-level-3, .token.known-level-4 { border-bottom-color: transparent; }
+    .segmented-line.compact .token { border-bottom-color: transparent; }
+    .token.known-level-1, .token.known-level-2, .token.known-level-3, .token.known-level-4 { border-bottom-color: transparent; background: #fef08a; }
+    .token.known-level-5 { border-bottom-color: transparent; background: transparent; }
     .reader-content.with-panel { position: relative; padding-bottom: 220px; }
     .token-panel {
       position: sticky;
       bottom: 0;
       margin-top: 14px;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 20px;
       background: var(--surface);
-      padding: 12px;
+      padding: 10px 12px 12px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
       z-index: 3;
+      max-width: 560px;
     }
-    .token-panel h3 { margin: 0 0 10px; font-size: 1rem; }
+    .token-panel h3 { margin: 0; font-size: 1.05rem; }
+    .token-panel-handle {
+      width: 86px;
+      height: 7px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--muted) 40%, transparent);
+      margin: 0 auto 8px;
+    }
     .token-grid { display: grid; gap: 6px; grid-template-columns: minmax(120px, 170px) 1fr; }
     .token-grid .k { color: var(--muted); font-size: 0.9rem; }
     .token-grid .v { font-weight: 500; word-break: break-word; }
@@ -953,30 +963,20 @@
         return;
       }
       const meanings = entry.meanings || dictionaryResult?.meanings || [];
-      const alternatives = dictionaryResult?.alternatives || [];
+      const firstDefinition = entry.userDefinition || entry.defaultDefinition || meanings[0] || 'Sin definición disponible.';
       host.innerHTML = `
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
-          <div class="toolbar" style="margin-bottom: 8px;">
-            <h3>Palabra seleccionada</h3>
+          <div class="token-panel-handle" aria-hidden="true"></div>
+          <div class="toolbar" style="margin-bottom: 8px; align-items: center;">
+            <h3>${escapeHtml(entry.surface || token.surface || '—')}</h3>
             <div class="spacer"></div>
-            <button id="closeTokenPanelBtn">Cerrar</button>
+            <button id="deleteUserDefinitionBtn" class="icon-btn" title="Borrar definición personalizada">🗑</button>
+            <button id="closeTokenPanelBtn" class="icon-btn" title="Cerrar">✓</button>
           </div>
           <div class="token-grid">
             <span class="k">surface</span><span class="v">${escapeHtml(entry.surface || token.surface || '—')}</span>
-            <span class="k">lemma/baseForm</span><span class="v">${escapeHtml(entry.lemma || token.baseForm || '—')}</span>
             <span class="k">hiragana</span><span class="v">${escapeHtml(entry.readingKana || '—')}</span>
-            <span class="k">romaji</span><span class="v">${escapeHtml(entry.readingRomaji || '—')}</span>
-            <span class="k">pos</span><span class="v">${escapeHtml(entry.pos || '—')}</span>
-            <span class="k">definición sugerida</span><span class="v">${escapeHtml(entry.defaultDefinition || 'No dictionary entry found')}</span>
-            <span class="k">vocabKey</span><span class="v">${escapeHtml(entry.vocabKey)}</span>
-          </div>
-          <div style="margin-top:8px;">
-            <div class="k">Acepciones secundarias</div>
-            ${renderMeaningsList(meanings)}
-          </div>
-          <div style="margin-top:8px;">
-            <div class="k">Alternativas de diccionario</div>
-            ${alternatives.length ? `<ul class="meanings-list">${alternatives.map((alt) => `<li><strong>${escapeHtml(alt.lemma || alt.surface || '—')}</strong> · ${escapeHtml((alt.meanings || [])[0] || '—')}</li>`).join('')}</ul>` : '<p class="status">Sin alternativas adicionales.</p>'}
+            <span class="k">definición</span><span class="v">${escapeHtml(firstDefinition)}</span>
           </div>
           <div class="level-picker" aria-label="Nivel de conocimiento">
             ${[1,2,3,4,5].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
@@ -986,11 +986,10 @@
             <label for="userDefinitionInput"><strong>Definición personalizada</strong></label>
             <textarea id="userDefinitionInput" placeholder="Escribe tu definición o nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
             <div class="toolbar" style="margin-top:8px;">
-              <button id="saveUserDefinitionBtn" class="primary">Guardar definición</button>
+              <button id="saveUserDefinitionBtn" class="primary">Guardar</button>
+              <button id="appendSuggestedDefinitionBtn">Añadir sugerida</button>
             </div>
-            <p class="field-help">La definición personalizada siempre tiene prioridad visual sobre tu comprensión personal y no reemplaza la sugerida del diccionario.</p>
           </div>
-          <p class="status" style="margin: 8px 0 0;">Clicks: ${entry.timesClicked || 0} · Última vez: ${formatDate(entry.lastSeenAt)} · Fuente diccionario: ${escapeHtml(entry.dictionarySource || 'N/A')}</p>
         </aside>
       `;
       const readerContent = $('.reader-content');
@@ -1015,6 +1014,22 @@
         if (!updated) return;
         state.tokenSelection.entry = updated;
         state.tokenSelection.userDefinitionDraft = updated.userDefinition || '';
+        renderTokenPanel();
+      });
+      $('#appendSuggestedDefinitionBtn')?.addEventListener('click', () => {
+        const suggested = entry.defaultDefinition || meanings[0] || '';
+        if (!suggested) return;
+        const input = $('#userDefinitionInput');
+        if (!input) return;
+        const prefix = (input.value || '').trim();
+        input.value = prefix ? `${prefix}\n${suggested}` : suggested;
+        state.tokenSelection.userDefinitionDraft = input.value;
+      });
+      $('#deleteUserDefinitionBtn')?.addEventListener('click', async () => {
+        const updated = await updateUserDefinition(entry.vocabKey, '');
+        if (!updated) return;
+        state.tokenSelection.entry = updated;
+        state.tokenSelection.userDefinitionDraft = '';
         renderTokenPanel();
       });
     }
@@ -1699,8 +1714,7 @@
           <button id="playSentenceBtn" class="play-main" title="Reproducir oración">▶</button>
         </div>
         <div class="sentence-box">${sentenceHtml}</div>
-        <p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>
-        <p class="status">Frase ${Math.min(idx + 1, Math.max(sentences.length, 1))} de ${Math.max(sentences.length, 1)} en esta sección.</p>
+        ${state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
         <button id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;">Traducir oración</button>
         <div id="tokenPanelHost"></div>
       `;
@@ -1711,6 +1725,11 @@
       const app = $('#app');
       const section = state.sections[state.currentSpineIndex];
       const percent = Math.round(((state.currentSpineIndex + 1) / state.sections.length) * 100);
+      const sectionSentences = getSentencesForSection(section);
+      const sentenceCurrent = Math.min(Math.max(state.currentSentenceIndex + 1, 1), Math.max(sectionSentences.length, 1));
+      const sentenceTotal = Math.max(sectionSentences.length, 1);
+      const chapterCurrent = Math.min(state.currentSpineIndex + 1, Math.max(state.sections.length, 1));
+      const chapterTotal = Math.max(state.sections.length, 1);
 
       app.innerHTML = `
         <div class="reader-shell">
@@ -1724,7 +1743,7 @@
               <div class="reader-headline">
                 <strong>${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</strong>
                 <span class="status">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</span>
-                <span class="status">Progreso aprox.: ${percent}%</span>
+                <span class="status">Progreso aprox.: ${percent}%${state.readingMode === 'sentence' ? ` · ${sentenceCurrent} / ${sentenceTotal} | ${chapterCurrent} / ${chapterTotal}` : ''}</span>
               </div>
             </div>
             <div id="readerMenu" class="toolbar hidden">
