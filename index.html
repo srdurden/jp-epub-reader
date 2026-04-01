@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JP EPUB Reader - Fase 4</title>
+  <title>JP Reader</title>
   <style>
     :root {
       --bg: #f5f7fb;
@@ -232,17 +232,6 @@
       align-items: center;
       margin-top: 10px;
     }
-    .upload-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border: 1px dashed var(--border);
-      border-radius: 14px;
-      padding: 8px 10px;
-      background: color-mix(in srgb, var(--surface) 90%, #eef2f8 10%);
-      max-width: 240px;
-    }
-    .upload-pill input[type="file"] { width: 100%; padding: 0; border: 0; background: transparent; }
     .book-shelf {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
@@ -268,6 +257,30 @@
       width: min(170px, 100%);
       height: 225px;
       border-radius: 12px;
+    }
+    .upload-book-tile {
+      cursor: pointer;
+    }
+    .upload-book-tile .book-cover-wrap {
+      border-style: dashed;
+      transition: border-color 120ms ease, background-color 120ms ease;
+      background: color-mix(in srgb, var(--surface) 88%, #eef2ff 12%);
+    }
+    .upload-book-tile .upload-plus {
+      width: 88px;
+      height: 88px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 2.6rem;
+      line-height: 1;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, #dbeafe 8%);
+      color: var(--text);
+    }
+    .upload-book-tile.dragover .book-cover-wrap {
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--surface) 80%, #bfdbfe 20%);
     }
   </style>
 </head>
@@ -1685,21 +1698,30 @@
         <div class="library-shell">
           <div class="library-card">
             <h1 class="library-headline">
-              <span>📚 JP EPUB Reader (Fase 4)</span>
-              <span class="status">Biblioteca personal</span>
+              <span>📚 JP Reader</span>
             </h1>
             <div class="library-toolbar">
               <button id="openVocabBtn">Vocabulario</button>
               <button id="importDictPackBtn" title="Importar dictionary pack local">Importar diccionario</button>
               <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
-              <label class="upload-pill"><span>Subir EPUB</span><input id="epubInput" type="file" accept=".epub,application/epub+zip" multiple /></label>
+              <input id="epubInput" class="hidden" type="file" accept=".epub,application/epub+zip" multiple />
               <div class="spacer"></div>
               <button id="toggleTheme" title="Cambiar tema">Tema: ${state.settings.theme === 'dark' ? 'Oscuro' : 'Claro'}</button>
             </div>
             <p class="status" style="margin:10px 0 0;">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</p>
             ${state.dictionaryStatus.importMessage ? `<p class="status">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
           </div>
-          ${state.books.length ? `<div class="book-shelf">${state.books.map((b) => {
+          <div class="book-shelf">
+            <article id="uploadBookTile" class="book-tile upload-book-tile" role="button" tabindex="0" aria-label="Subir EPUB">
+              <div class="book-cover-wrap">
+                <button id="uploadBookBtn" class="upload-plus" type="button" aria-label="Subir EPUB">+</button>
+              </div>
+              <div>
+                <h2 class="book-title">Subir epub</h2>
+                <p class="meta">Haz clic en + o arrastra un .epub aquí.</p>
+              </div>
+            </article>
+            ${state.books.length ? state.books.map((b) => {
             const pg = progressMap.get(b.id);
             return `
               <article class="book-tile">
@@ -1716,11 +1738,41 @@
                   </div>
                 </div>
               </article>`;
-          }).join('')}</div>` : `<div class="library-card"><div class="empty">No hay libros todavía. Sube uno o varios EPUB para comenzar.</div></div>`}
+          }).join('') : ''}
+          </div>
         </div>`;
 
       $('#epubInput').addEventListener('change', async (e) => {
         const files = [...e.target.files || []].filter((f) => f.name.toLowerCase().endsWith('.epub'));
+        if (!files.length) return;
+        await importEpubFiles(files);
+      });
+      const uploadInput = $('#epubInput');
+      const uploadTile = $('#uploadBookTile');
+      const uploadBtn = $('#uploadBookBtn');
+      const openUploadPicker = () => uploadInput?.click();
+      uploadBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openUploadPicker();
+      });
+      uploadTile?.addEventListener('click', openUploadPicker);
+      uploadTile?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openUploadPicker();
+        }
+      });
+      uploadTile?.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadTile.classList.add('dragover');
+      });
+      uploadTile?.addEventListener('dragleave', () => {
+        uploadTile.classList.remove('dragover');
+      });
+      uploadTile?.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        uploadTile.classList.remove('dragover');
+        const files = [...(e.dataTransfer?.files || [])].filter((f) => f.name.toLowerCase().endsWith('.epub'));
         if (!files.length) return;
         await importEpubFiles(files);
       });
