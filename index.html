@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JP EPUB Reader - Fase 1</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --text: #1f2430;
+      --muted: #5f6b7a;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --border: #dbe2ea;
+    }
+    [data-theme="dark"] {
+      --bg: #0f172a;
+      --surface: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --primary: #60a5fa;
+      --danger: #f87171;
+      --border: #374151;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 16px;
+    }
+    .app { max-width: 980px; margin: 0 auto; padding: 16px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .spacer { flex: 1; }
+    button, select, input[type="range"] {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      font: inherit;
+    }
+    button.primary { background: var(--primary); color: white; border-color: transparent; }
+    button.danger { color: white; background: var(--danger); border-color: transparent; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+    .book-item { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: start; }
+    .cover { width: 72px; height: 96px; border: 1px solid var(--border); border-radius: 8px; object-fit: cover; background: #cbd5e1; }
+    .book-title { margin: 0 0 4px; font-size: 1rem; }
+    .meta { margin: 2px 0; color: var(--muted); font-size: 0.85rem; }
+    .empty { text-align: center; padding: 32px 12px; color: var(--muted); }
+    .reader-shell { display: grid; gap: 10px; }
+    .reader-content {
+      min-height: 58vh;
+      max-height: 65vh;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      background: var(--surface);
+      line-height: 1.8;
+    }
+    .reader-content iframe { width: 100%; min-height: 56vh; border: 0; }
+    .sentence-box { font-size: 1.35em; line-height: 1.9; white-space: pre-wrap; }
+    .status { color: var(--muted); font-size: 0.9rem; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="app" class="app"></div>
+
+  <script>
+    /*
+      JP EPUB Reader - Fase 1 (offline-first)
+      Arquitectura (todo autocontenido en este archivo):
+      1) Config / constantes
+      2) Utilidades generales
+      3) Capa IndexedDB
+      4) Importación y almacenamiento de EPUB
+      5) Extracción de metadatos
+      6) Lógica del lector (modo página + modo frase)
+      7) Renderizado UI + Router
+      8) Preferencias + Service Worker
+
+      Limitaciones conocidas Fase 1:
+      - Parser EPUB minimalista: soporta ZIP método Stored (0) y Deflate (8).
+      - Algunos EPUB complejos pueden renderizar estilos/recursos de forma parcial.
+      - Segmentación de frases heurística, prioriza robustez.
+      - No tokenizer, no diccionario, no clic de palabras (reservado para fases futuras).
+    */
+
+    // =========================
+    // Config / constantes
+    // =========================
+    const DB_NAME = 'jp_epub_reader_db';
+    const DB_VERSION = 1;
+    const STORES = {
+      books: 'books',
+      bookFiles: 'bookFiles',
+      progress: 'progress',
+      settings: 'settings'
+    };
+    const SETTINGS_KEY = 'app_settings';
+    const DEFAULT_SETTINGS = { theme: 'light', fontSize: 18, lastOpenedBookId: null };
+
+    const state = {
+      route: 'library',
+      books: [],
+      currentBook: null,
+      currentBookId: null,
+      currentSpineIndex: 0,
+      currentSentenceIndex: 0,
+      readingMode: 'page',
+      sections: [],
+      sectionSentencesCache: new Map(),
+      settings: { ...DEFAULT_SETTINGS }
+    };
+
+    // =========================
+    // Utilidades generales
+    // =========================
+    const $ = (sel, root = document) => root.querySelector(sel);
+
+    function escapeHtml(str = '') {
+      return str.replace(/[&<>"]/g, (m) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '—';
+      try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    }
+
+    function uuid() {
+      return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+
+    function normalizePath(path) {
+      const parts = [];
+      for (const part of path.split('/')) {
+        if (!part || part === '.') continue;
+        if (part === '..') parts.pop();
+        else parts.push(part);
+      }
+      return parts.join('/');
+    }
+
+    function resolveHref(basePath, href) {
+      if (!href) return '';
+      if (/^[a-z]+:/i.test(href) || href.startsWith('/')) return href;
+      const clean = href.split('#')[0].split('?')[0];
+      const baseDir = basePath.includes('/') ? basePath.slice(0, basePath.lastIndexOf('/') + 1) : '';
+      return normalizePath(baseDir + clean);
+    }
+
+    function uint8ToText(bytes, encoding = 'utf-8') {
+      return new TextDecoder(encoding).decode(bytes);
+    }
+
+    function bytesToDataUrl(bytes, mime = 'application/octet-stream') {
+      const blob = new Blob([bytes], { type: mime });
+      return new Promise((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.readAsDataURL(blob);
+      });
+    }
+
+    // =========================
+    // Capa IndexedDB
+    // =========================
+    function openDatabase() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(STORES.books)) db.createObjectStore(STORES.books, { keyPath: 'id' });
+          if (!db.objectStoreNames.contains(STORES.bookFiles)) db.createObjectStore(STORES.bookFiles, { keyPath: 'bookId' });
+          if (!db.objectStoreNames.contains(STORES.progress)) db.createObjectStore(STORES.progress, { keyPath: 'bookId' });
+          if (!db.objectStoreNames.contains(STORES.settings)) db.createObjectStore(STORES.settings, { keyPath: 'id' });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbPut(storeName, value) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).put(value);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function dbGet(storeName, key) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbGetAll(storeName) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbDelete(storeName, key) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function listBooks() {
+      const books = await dbGetAll(STORES.books);
+      return books.sort((a,b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    }
+
+    async function saveBook(book, fileBlob) {
+      await dbPut(STORES.books, book);
+      await dbPut(STORES.bookFiles, { bookId: book.id, epubBlob: fileBlob });
+    }
+
+    async function loadBookBlob(bookId) {
+      const rec = await dbGet(STORES.bookFiles, bookId);
+      return rec?.epubBlob || null;
+    }
+
+    async function deleteBook(bookId) {
+      await dbDelete(STORES.books, bookId);
+      await dbDelete(STORES.bookFiles, bookId);
+      await dbDelete(STORES.progress, bookId);
+    }
+
+    async function saveReadingProgress(bookId, payload) {
+      await dbPut(STORES.progress, { bookId, updatedAt: new Date().toISOString(), ...payload });
+    }
+
+    async function loadReadingProgress(bookId) {
+      return (await dbGet(STORES.progress, bookId)) || null;
+    }
+
+    async function loadSettings() {
+      const rec = await dbGet(STORES.settings, SETTINGS_KEY);
+      state.settings = { ...DEFAULT_SETTINGS, ...(rec?.value || {}) };
+      applyTheme(state.settings.theme);
+    }
+
+    async function saveSettings(next) {
+      state.settings = { ...state.settings, ...next };
+      await dbPut(STORES.settings, { id: SETTINGS_KEY, value: state.settings });
+      applyTheme(state.settings.theme);
+    }
+
+    // =========================
+    // Importación / EPUB minimal parser
+    // =========================
+    function readU16(view, offset) { return view.getUint16(offset, true); }
+    function readU32(view, offset) { return view.getUint32(offset, true); }
+
+    async function inflateDeflateRaw(bytes) {
+      if (typeof DecompressionStream === 'undefined') {
+        throw new Error('Tu navegador no soporta DecompressionStream (necesario para EPUB Deflate).');
+      }
+      const ds = new DecompressionStream('deflate-raw');
+      const stream = new Blob([bytes]).stream().pipeThrough(ds);
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+
+    async function unzipEpub(arrayBuffer) {
+      const bytes = new Uint8Array(arrayBuffer);
+      const view = new DataView(arrayBuffer);
+      let eocdOffset = -1;
+      for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+        if (readU32(view, i) === 0x06054b50) { eocdOffset = i; break; }
+      }
+      if (eocdOffset < 0) throw new Error('No se encontró EOCD de ZIP');
+
+      const centralDirSize = readU32(view, eocdOffset + 12);
+      const centralDirOffset = readU32(view, eocdOffset + 16);
+      const entries = [];
+      let ptr = centralDirOffset;
+      const end = centralDirOffset + centralDirSize;
+
+      while (ptr < end) {
+        if (readU32(view, ptr) !== 0x02014b50) throw new Error('Cabecera central inválida');
+        const compression = readU16(view, ptr + 10);
+        const compressedSize = readU32(view, ptr + 20);
+        const fileNameLen = readU16(view, ptr + 28);
+        const extraLen = readU16(view, ptr + 30);
+        const commentLen = readU16(view, ptr + 32);
+        const localHeaderOffset = readU32(view, ptr + 42);
+        const nameBytes = bytes.slice(ptr + 46, ptr + 46 + fileNameLen);
+        const name = uint8ToText(nameBytes);
+        entries.push({ name, compression, compressedSize, localHeaderOffset });
+        ptr += 46 + fileNameLen + extraLen + commentLen;
+      }
+
+      const files = new Map();
+      for (const entry of entries) {
+        if (entry.name.endsWith('/')) continue;
+        const lh = entry.localHeaderOffset;
+        if (readU32(view, lh) !== 0x04034b50) continue;
+        const nameLen = readU16(view, lh + 26);
+        const extraLen = readU16(view, lh + 28);
+        const dataStart = lh + 30 + nameLen + extraLen;
+        const compBytes = bytes.slice(dataStart, dataStart + entry.compressedSize);
+        let out;
+        if (entry.compression === 0) out = compBytes;
+        else if (entry.compression === 8) out = await inflateDeflateRaw(compBytes);
+        else continue;
+        files.set(normalizePath(entry.name), out);
+      }
+      return files;
+    }
+
+    function parseXml(xmlText) {
+      return new DOMParser().parseFromString(xmlText, 'application/xml');
+    }
+
+    function parseXhtml(htmlText) {
+      return new DOMParser().parseFromString(htmlText, 'text/html');
+    }
+
+    async function extractReadableSections(epubMap) {
+      const containerBytes = epubMap.get('META-INF/container.xml');
+      if (!containerBytes) throw new Error('EPUB inválido: falta META-INF/container.xml');
+      const containerXml = parseXml(uint8ToText(containerBytes));
+      const rootFile = containerXml.querySelector('rootfile')?.getAttribute('full-path');
+      if (!rootFile) throw new Error('EPUB inválido: falta rootfile OPF');
+
+      const opfPath = normalizePath(rootFile);
+      const opfBytes = epubMap.get(opfPath);
+      if (!opfBytes) throw new Error(`No se encontró OPF: ${opfPath}`);
+
+      const opfXml = parseXml(uint8ToText(opfBytes));
+      const title = opfXml.querySelector('metadata > title, metadata > dc\\:title')?.textContent?.trim() || 'Sin título';
+      const author = opfXml.querySelector('metadata > creator, metadata > dc\\:creator')?.textContent?.trim() || 'Autor desconocido';
+
+      const manifest = new Map();
+      opfXml.querySelectorAll('manifest > item').forEach((item) => {
+        manifest.set(item.getAttribute('id'), {
+          href: item.getAttribute('href') || '',
+          mediaType: item.getAttribute('media-type') || '',
+          properties: item.getAttribute('properties') || ''
+        });
+      });
+
+      const spineIds = [...opfXml.querySelectorAll('spine > itemref')].map((n) => n.getAttribute('idref')).filter(Boolean);
+      const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+
+      let coverDataUrl = null;
+      const coverMetaId = opfXml.querySelector('metadata > meta[name="cover"]')?.getAttribute('content');
+      const coverManifestItem = coverMetaId ? manifest.get(coverMetaId) : [...manifest.values()].find((m) => (m.properties || '').includes('cover-image'));
+      if (coverManifestItem?.href) {
+        const coverPath = normalizePath(opfDir + coverManifestItem.href);
+        const coverBytes = epubMap.get(coverPath);
+        if (coverBytes) coverDataUrl = await bytesToDataUrl(coverBytes, coverManifestItem.mediaType || 'image/jpeg');
+      }
+
+      const sections = [];
+      for (let i = 0; i < spineIds.length; i++) {
+        const item = manifest.get(spineIds[i]);
+        if (!item || !item.href) continue;
+        const sectionPath = normalizePath(opfDir + item.href);
+        const sectionBytes = epubMap.get(sectionPath);
+        if (!sectionBytes) continue;
+        const rawHtml = uint8ToText(sectionBytes);
+        const doc = parseXhtml(rawHtml);
+        const sectionTitle = doc.querySelector('title,h1,h2')?.textContent?.trim() || `Sección ${i + 1}`;
+        sections.push({ index: i, path: sectionPath, title: sectionTitle, html: rawHtml });
+      }
+
+      return { title, author, coverDataUrl, sections };
+    }
+
+    async function importEpubFiles(fileList) {
+      for (const file of fileList) {
+        try {
+          const buffer = await file.arrayBuffer();
+          const epubMap = await unzipEpub(buffer);
+          const meta = await extractReadableSections(epubMap);
+          const now = new Date().toISOString();
+          const book = {
+            id: uuid(), fileName: file.name, title: meta.title, author: meta.author,
+            cover: meta.coverDataUrl, createdAt: now, updatedAt: now, lastOpenedAt: null
+          };
+          await saveBook(book, file);
+        } catch (err) {
+          alert(`Error importando ${file.name}: ${err.message}`);
+        }
+      }
+      await refreshBooks();
+      renderLibraryView();
+    }
+
+    // =========================
+    // Modo frase (heurística)
+    // =========================
+    function splitTextIntoSentences(text) {
+      const cleaned = (text || '').replace(/\s+/g, ' ').replace(/\u3000/g, ' ').trim();
+      if (!cleaned) return [];
+      const rough = cleaned
+        .replace(/([。！？!?])\s*/g, '$1\n')
+        .replace(/\n+/g, '\n')
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return rough.length ? rough : [cleaned];
+    }
+
+    function extractVisibleTextFromSection(html) {
+      const doc = parseXhtml(html);
+      doc.querySelectorAll('script,style,noscript').forEach((n) => n.remove());
+      return doc.body?.innerText || doc.documentElement?.textContent || '';
+    }
+
+    function getSentencesForSection(section) {
+      if (state.sectionSentencesCache.has(section.path)) return state.sectionSentencesCache.get(section.path);
+      const text = extractVisibleTextFromSection(section.html);
+      const sentences = splitTextIntoSentences(text);
+      state.sectionSentencesCache.set(section.path, sentences);
+      return sentences;
+    }
+
+    // =========================
+    // Lógica del lector
+    // =========================
+    async function openReader(bookId) {
+      const book = state.books.find((b) => b.id === bookId);
+      if (!book) return;
+      const blob = await loadBookBlob(bookId);
+      if (!blob) return alert('No se encontró el archivo EPUB asociado.');
+
+      const epubMap = await unzipEpub(await blob.arrayBuffer());
+      const parsed = await extractReadableSections(epubMap);
+      if (!parsed.sections.length) return alert('No se encontraron secciones legibles en este EPUB.');
+
+      const progress = await loadReadingProgress(bookId);
+      state.currentBook = { ...book, parsedTitle: parsed.title, parsedAuthor: parsed.author };
+      state.currentBookId = bookId;
+      state.sections = parsed.sections;
+      state.currentSpineIndex = Math.min(progress?.currentSectionIndex || 0, parsed.sections.length - 1);
+      state.readingMode = progress?.readingMode || 'page';
+      state.currentSentenceIndex = progress?.currentSentenceIndex || 0;
+      state.sectionSentencesCache.clear();
+
+      await dbPut(STORES.books, { ...book, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      await saveSettings({ lastOpenedBookId: bookId });
+      state.route = 'reader';
+      await refreshBooks();
+      renderReaderView();
+    }
+
+    async function persistCurrentProgress() {
+      if (!state.currentBookId) return;
+      const percent = ((state.currentSpineIndex + 1) / Math.max(state.sections.length, 1)) * 100;
+      await saveReadingProgress(state.currentBookId, {
+        readingMode: state.readingMode,
+        currentLocation: state.sections[state.currentSpineIndex]?.path || null,
+        currentSectionIndex: state.currentSpineIndex,
+        currentSentenceIndex: state.currentSentenceIndex,
+        percent: Number(percent.toFixed(2))
+      });
+    }
+
+    async function setReadingMode(mode) {
+      state.readingMode = mode;
+      if (mode === 'sentence') state.currentSentenceIndex = 0;
+      await persistCurrentProgress();
+      renderReaderView();
+    }
+
+    async function nextStep() {
+      if (state.readingMode === 'page') {
+        if (state.currentSpineIndex < state.sections.length - 1) state.currentSpineIndex++;
+      } else {
+        const sents = getSentencesForSection(state.sections[state.currentSpineIndex]);
+        if (state.currentSentenceIndex < sents.length - 1) state.currentSentenceIndex++;
+        else if (state.currentSpineIndex < state.sections.length - 1) {
+          state.currentSpineIndex++;
+          state.currentSentenceIndex = 0;
+        }
+      }
+      await persistCurrentProgress();
+      renderReaderView();
+    }
+
+    async function prevStep() {
+      if (state.readingMode === 'page') {
+        if (state.currentSpineIndex > 0) state.currentSpineIndex--;
+      } else {
+        if (state.currentSentenceIndex > 0) state.currentSentenceIndex--;
+        else if (state.currentSpineIndex > 0) {
+          state.currentSpineIndex--;
+          const sents = getSentencesForSection(state.sections[state.currentSpineIndex]);
+          state.currentSentenceIndex = Math.max(0, sents.length - 1);
+        }
+      }
+      await persistCurrentProgress();
+      renderReaderView();
+    }
+
+    // =========================
+    // Renderizado UI + Router
+    // =========================
+    async function refreshBooks() {
+      state.books = await listBooks();
+    }
+
+    function getBookProgress(bookId) {
+      return dbGet(STORES.progress, bookId);
+    }
+
+    async function renderLibraryView() {
+      state.route = 'library';
+      const app = $('#app');
+      const progressMap = new Map();
+      for (const b of state.books) progressMap.set(b.id, await getBookProgress(b.id));
+
+      app.innerHTML = `
+        <div class="card">
+          <div class="toolbar">
+            <h1 style="margin:0;font-size:1.3rem;">📚 JP EPUB Reader (Fase 1)</h1>
+            <div class="spacer"></div>
+            <label><span class="hidden">Subir EPUB</span><input id="epubInput" type="file" accept=".epub,application/epub+zip" multiple /></label>
+            <button id="toggleTheme" title="Cambiar tema">Tema: ${state.settings.theme === 'dark' ? 'Oscuro' : 'Claro'}</button>
+          </div>
+          ${state.books.length ? `<div class="book-grid">${state.books.map((b) => {
+            const pg = progressMap.get(b.id);
+            return `
+              <article class="card book-item">
+                ${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title)}" />` : `<div class="cover"></div>`}
+                <div>
+                  <h2 class="book-title">${escapeHtml(b.title || b.fileName)}</h2>
+                  <p class="meta">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
+                  <p class="meta">Importado: ${formatDate(b.createdAt)}</p>
+                  <p class="meta">Último acceso: ${formatDate(b.lastOpenedAt)}</p>
+                  <p class="meta">Progreso: ${pg?.percent != null ? `${pg.percent}% (${pg.readingMode})` : 'Sin iniciar'}</p>
+                  <div class="toolbar" style="margin-top:8px;">
+                    <button data-open="${b.id}" class="primary">Abrir</button>
+                    <button data-delete="${b.id}" class="danger">Borrar</button>
+                  </div>
+                </div>
+              </article>`;
+          }).join('')}</div>` : `<div class="empty">No hay libros todavía. Sube uno o varios EPUB para comenzar.</div>`}
+        </div>`;
+
+      $('#epubInput').addEventListener('change', async (e) => {
+        const files = [...e.target.files || []].filter((f) => f.name.toLowerCase().endsWith('.epub'));
+        if (!files.length) return;
+        await importEpubFiles(files);
+      });
+
+      $('#toggleTheme').addEventListener('click', async () => {
+        const next = state.settings.theme === 'dark' ? 'light' : 'dark';
+        await saveSettings({ theme: next });
+        renderLibraryView();
+      });
+
+      app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
+      app.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
+        if (!confirm('¿Seguro que quieres borrar este libro y su progreso?')) return;
+        await deleteBook(btn.dataset.delete);
+        await refreshBooks();
+        renderLibraryView();
+      }));
+    }
+
+    function renderPageMode(section) {
+      const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:serif;line-height:1.8;font-size:${state.settings.fontSize}px;padding:8px;color:${state.settings.theme==='dark'?'#e5e7eb':'#1f2430'};background:${state.settings.theme==='dark'?'#111827':'#fff'};max-width:100%;}img{max-width:100%;height:auto;}a{color:inherit;text-decoration:underline;}</style></head><body>${section.html}</body></html>`;
+      return `<iframe title="Contenido EPUB" srcdoc="${escapeHtml(html)}"></iframe>`;
+    }
+
+    function renderSentenceMode(section) {
+      const sentences = getSentencesForSection(section);
+      const idx = Math.max(0, Math.min(state.currentSentenceIndex, Math.max(0, sentences.length - 1)));
+      const sentence = sentences[idx] || 'Sin texto legible en esta sección.';
+      return `
+        <div class="sentence-box">${escapeHtml(sentence)}</div>
+        <p class="status">Frase ${Math.min(idx + 1, Math.max(sentences.length, 1))} de ${Math.max(sentences.length, 1)} en esta sección.</p>
+      `;
+    }
+
+    async function renderReaderView() {
+      if (!state.currentBook) return renderLibraryView();
+      const app = $('#app');
+      const section = state.sections[state.currentSpineIndex];
+      const percent = Math.round(((state.currentSpineIndex + 1) / state.sections.length) * 100);
+
+      app.innerHTML = `
+        <div class="reader-shell">
+          <div class="card">
+            <div class="toolbar">
+              <button id="backBtn">← Biblioteca</button>
+              <strong>${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</strong>
+              <span class="status">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</span>
+              <div class="spacer"></div>
+              <label>Tema
+                <select id="themeSelect"><option value="light">Claro</option><option value="dark">Oscuro</option></select>
+              </label>
+              <label>Fuente
+                <input id="fontSize" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
+              </label>
+            </div>
+            <div class="toolbar">
+              <button id="prevBtn">Anterior</button>
+              <button id="nextBtn" class="primary">Siguiente</button>
+              <label>Modo
+                <select id="modeSelect"><option value="page">Página</option><option value="sentence">Frase</option></select>
+              </label>
+              <label>Capítulo
+                <select id="sectionSelect">${state.sections.map((s, i) => `<option value="${i}">${i+1}. ${escapeHtml(s.title)}</option>`).join('')}</select>
+              </label>
+              <span class="status">Progreso aprox.: ${percent}% (${state.currentSpineIndex + 1}/${state.sections.length})</span>
+            </div>
+          </div>
+          <div class="reader-content">${state.readingMode === 'page' ? renderPageMode(section) : renderSentenceMode(section)}</div>
+        </div>
+      `;
+
+      $('#themeSelect').value = state.settings.theme;
+      $('#modeSelect').value = state.readingMode;
+      $('#sectionSelect').value = String(state.currentSpineIndex);
+
+      $('#backBtn').addEventListener('click', async () => {
+        await persistCurrentProgress();
+        await refreshBooks();
+        renderLibraryView();
+      });
+      $('#prevBtn').addEventListener('click', prevStep);
+      $('#nextBtn').addEventListener('click', nextStep);
+      $('#modeSelect').addEventListener('change', (e) => setReadingMode(e.target.value));
+      $('#sectionSelect').addEventListener('change', async (e) => {
+        state.currentSpineIndex = Number(e.target.value);
+        state.currentSentenceIndex = 0;
+        await persistCurrentProgress();
+        renderReaderView();
+      });
+      $('#themeSelect').addEventListener('change', async (e) => {
+        await saveSettings({ theme: e.target.value });
+        renderReaderView();
+      });
+      $('#fontSize').addEventListener('input', async (e) => {
+        await saveSettings({ fontSize: Number(e.target.value) });
+        renderReaderView();
+      });
+    }
+
+    // =========================
+    // Preferencias + SW
+    // =========================
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+    }
+
+    async function registerServiceWorker() {
+      if (!('serviceWorker' in navigator)) return;
+      try {
+        await navigator.serviceWorker.register('./sw.js');
+      } catch (e) {
+        console.warn('No se pudo registrar SW', e);
+      }
+    }
+
+    // =========================
+    // Inicialización
+    // =========================
+    (async function init() {
+      await loadSettings();
+      await refreshBooks();
+      await registerServiceWorker();
+      renderLibraryView();
+      if (state.settings.lastOpenedBookId && state.books.some((b) => b.id === state.settings.lastOpenedBookId)) {
+        // Punto de extensión futuro: restaurar auto-apertura configurable.
+      }
+    })();
+
+    // Punto de extensión futuro (Fase 2+): capa léxica/tokenizer
+    function getLexicalAnnotations(_text, _options) {
+      return null;
+    }
+  </script>
+</body>
+</html>
