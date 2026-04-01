@@ -6,7 +6,7 @@
   <title>JP Reader</title>
   <style>
     :root {
-      --bg: #f5f7fb;
+      --bg: #eeebfa;
       --surface: #ffffff;
       --text: #1f2430;
       --muted: #5f6b7a;
@@ -31,7 +31,7 @@
       color: var(--text);
       font-size: 16px;
     }
-    .app { max-width: 980px; margin: 0 auto; padding: 16px; }
+    .app { max-width: 760px; margin: 0 auto; padding: 20px 16px 32px; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
     .spacer { flex: 1; }
@@ -210,12 +210,13 @@
       border: 2px solid color-mix(in srgb, var(--text) 70%, transparent);
       background: transparent;
     }
-    .library-shell { display: grid; gap: 12px; }
+    .library-shell { display: grid; gap: 18px; }
     .library-card {
-      background: color-mix(in srgb, var(--surface) 94%, #e5e7eb 6%);
-      border: 1px solid var(--border);
-      border-radius: 22px;
-      padding: 12px 14px;
+      background: color-mix(in srgb, var(--surface) 96%, #f4f5fa 4%);
+      border: 1px solid color-mix(in srgb, var(--border) 78%, #fff 22%);
+      border-radius: 34px;
+      padding: 22px 20px;
+      box-shadow: 0 16px 34px rgba(66, 52, 105, 0.12);
     }
     .library-headline {
       display: flex;
@@ -226,36 +227,39 @@
     }
     .library-toolbar {
       display: flex;
-      gap: 8px;
+      gap: 10px;
       flex-wrap: wrap;
       align-items: center;
-      margin-top: 10px;
+      margin-top: 12px;
     }
     .book-shelf {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
-      gap: 12px;
+      grid-template-columns: 1fr;
+      gap: 16px;
     }
     .book-tile {
-      border-radius: 22px;
-      background: color-mix(in srgb, var(--surface) 95%, #edf1f7 5%);
-      border: 1px solid var(--border);
-      padding: 12px;
+      border-radius: 32px;
+      background: color-mix(in srgb, var(--surface) 96%, #f4f5fa 4%);
+      border: 1px solid color-mix(in srgb, var(--border) 74%, #fff 26%);
+      padding: 12px 12px 16px;
       display: grid;
-      gap: 12px;
+      gap: 10px;
+      box-shadow: 0 12px 26px rgba(66, 52, 105, 0.1);
     }
     .book-cover-wrap {
       display: grid;
       place-items: center;
-      border-radius: 16px;
+      border-radius: 26px;
       border: 1px solid var(--border);
-      min-height: 210px;
-      background: color-mix(in srgb, var(--surface) 82%, #dbeafe 18%);
+      min-height: 270px;
+      background: color-mix(in srgb, var(--surface) 90%, #dad5f8 10%);
+      overflow: hidden;
     }
     .book-cover-wrap .cover {
-      width: min(170px, 100%);
-      height: 225px;
-      border-radius: 12px;
+      width: 100%;
+      height: min(52vw, 360px);
+      border-radius: 0;
+      border: 0;
     }
     .book-cover-button {
       width: 100%;
@@ -267,7 +271,67 @@
     .book-actions {
       display: flex;
       justify-content: flex-end;
+      margin-top: 4px;
+    }
+    .book-header {
+      display: grid;
+      gap: 4px;
+      padding: 4px 4px 0;
+    }
+    .book-title {
+      margin: 0;
+      font-size: clamp(1.5rem, 3.8vw, 2rem);
+      line-height: 1.14;
+      letter-spacing: -0.01em;
+    }
+    .book-progress-shell {
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 14px 14px 10px;
       margin-top: 8px;
+      background: color-mix(in srgb, var(--surface) 96%, #f0f1f7 4%);
+    }
+    .book-progress-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: clamp(1.03rem, 2.8vw, 1.14rem);
+      margin-bottom: 8px;
+    }
+    .book-progress-shell input[type="range"] {
+      width: 100%;
+      padding: 0;
+      accent-color: color-mix(in srgb, var(--primary) 40%, #8b82bf 60%);
+    }
+    .book-footer {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .book-play-main {
+      width: 84px;
+      height: 84px;
+      border-radius: 999px;
+      border: 2px solid color-mix(in srgb, var(--text) 60%, #999 40%);
+      background: color-mix(in srgb, var(--surface) 94%, #e9e8f7 6%);
+      font-size: 2rem;
+      line-height: 1;
+      cursor: pointer;
+      justify-self: center;
+    }
+    .book-delete-btn {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 1.5rem;
+      color: var(--text);
+      background: color-mix(in srgb, var(--surface) 92%, #eceff6 8%);
+      border: 1px solid var(--border);
+      justify-self: end;
     }
     .segmented-toggle {
       display: inline-grid;
@@ -288,8 +352,9 @@
       min-width: 70px;
     }
     .segmented-toggle button.active {
-      background: var(--primary);
-      color: #fff;
+      background: #fff;
+      color: var(--text);
+      box-shadow: 0 4px 12px rgba(71, 64, 105, 0.12);
     }
     .upload-book-tile {
       cursor: pointer;
@@ -1738,7 +1803,7 @@
         <div class="library-shell">
           <div class="library-card">
             <h1 class="library-headline">
-              <span>JP Reader</span>
+              <span style="font-size:clamp(2.2rem,7vw,3.3rem);line-height:1;margin:0;">JP Reader</span>
             </h1>
             <div class="library-toolbar">
               <button id="openVocabBtn">Vocabulario</button>
@@ -1747,8 +1812,8 @@
               <input id="epubInput" class="hidden" type="file" accept=".epub,application/epub+zip" multiple />
               <div class="spacer"></div>
               <div id="libraryThemeToggle" class="segmented-toggle" role="group" aria-label="Tema">
-                <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}">Claro</button>
-                <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}">Oscuro</button>
+                <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}">☀️ Claro</button>
+                <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}">🌙 Oscuro</button>
               </div>
             </div>
             <p class="status" style="margin:10px 0 0;">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</p>
@@ -1762,14 +1827,20 @@
                 <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
                   <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title)}" />` : `<div class="cover"></div>`}</div>
                 </button>
-                <div>
+                <div class="book-header">
                   <h2 class="book-title">${escapeHtml(b.title || b.fileName)}</h2>
                   <p class="meta">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
-                  <p class="meta">Importado: ${formatDate(b.createdAt)}</p>
-                  <p class="meta">Último acceso: ${formatDate(b.lastOpenedAt)}</p>
-                  <p class="meta">Progreso: ${pg?.percent != null ? `${pg.percent}% (${pg.readingMode})` : 'Sin iniciar'}</p>
-                  <div class="book-actions">
-                    <button data-delete="${b.id}" class="icon-btn danger" title="Borrar libro" aria-label="Borrar libro">🗑</button>
+                  <div class="book-progress-shell">
+                    <div class="book-progress-head">
+                      <span>Progreso aprox.: ${pg?.percent != null ? `${pg.percent}%` : '0%'}</span>
+                      <span>Cap. ${pg?.currentSectionIndex != null ? pg.currentSectionIndex + 1 : 1} · ${pg?.readingMode === 'sentence' ? 'frase' : 'página'}</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
+                    <div class="book-footer">
+                      <span></span>
+                      <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura">▶</button>
+                      <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro">🗑</button>
+                    </div>
                   </div>
                 </div>
               </article>`;
