@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JP EPUB Reader - Fase 1</title>
+  <title>JP EPUB Reader - Fase 2</title>
   <style>
     :root {
       --bg: #f5f7fb;
@@ -65,6 +65,28 @@
     }
     .reader-content iframe { width: 100%; min-height: 56vh; border: 0; }
     .sentence-box { font-size: 1.35em; line-height: 1.9; white-space: pre-wrap; }
+    .segmented-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.12em;
+      align-items: baseline;
+    }
+    .token {
+      border-radius: 4px;
+      padding: 0 0.05em;
+      border-bottom: 1px solid transparent;
+    }
+    .token.jp { border-bottom-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+    .token.punct { opacity: 0.9; }
+    .token.dbg::after {
+      content: attr(data-debug);
+      display: block;
+      font-size: 0.62rem;
+      line-height: 1.2;
+      color: var(--muted);
+      margin-top: 0.06rem;
+      text-align: center;
+    }
     .status { color: var(--muted); font-size: 0.9rem; }
     .hidden { display: none !important; }
   </style>
@@ -74,7 +96,7 @@
 
   <script>
     /*
-      JP EPUB Reader - Fase 1 (offline-first)
+      JP EPUB Reader - Fase 2 (offline-first)
       Arquitectura (todo autocontenido en este archivo):
       1) Config / constantes
       2) Utilidades generales
@@ -82,14 +104,15 @@
       4) Importación y almacenamiento de EPUB
       5) Extracción de metadatos
       6) Lógica del lector (modo página + modo frase)
-      7) Renderizado UI + Router
-      8) Preferencias + Service Worker
+      7) [NUEVO Fase 2] Normalización + tokenización japonesa + render de tokens
+      8) Renderizado UI + Router
+      9) Preferencias + Service Worker
 
       Limitaciones conocidas Fase 1:
       - Parser EPUB minimalista: soporta ZIP método Stored (0) y Deflate (8).
       - Algunos EPUB complejos pueden renderizar estilos/recursos de forma parcial.
       - Segmentación de frases heurística, prioriza robustez.
-      - No tokenizer, no diccionario, no clic de palabras (reservado para fases futuras).
+      - Fase 2 agrega tokenización y segmentación visual opcional (sin popup ni clic funcional).
     */
 
     // =========================
@@ -104,7 +127,13 @@
       settings: 'settings'
     };
     const SETTINGS_KEY = 'app_settings';
-    const DEFAULT_SETTINGS = { theme: 'light', fontSize: 18, lastOpenedBookId: null };
+    const DEFAULT_SETTINGS = {
+      theme: 'light',
+      fontSize: 18,
+      showSegmentation: false,
+      tokenDebug: false,
+      lastOpenedBookId: null
+    };
 
     const state = {
       route: 'library',
@@ -116,6 +145,7 @@
       readingMode: 'page',
       sections: [],
       sectionSentencesCache: new Map(),
+      sentenceTokenCache: new Map(),
       settings: { ...DEFAULT_SETTINGS }
     };
 
@@ -439,6 +469,163 @@
     }
 
     // =========================
+    // [NUEVO Fase 2] Text normalization utilities
+    // =========================
+    const WORD_SEGMENTER = typeof Intl !== 'undefined' && Intl.Segmenter
+      ? new Intl.Segmenter('ja', { granularity: 'word' })
+      : null;
+
+    function normalizeTokenSurface(text) {
+      return (text || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+    }
+
+    function isJapaneseChar(char) {
+      return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(char || '');
+    }
+
+    function isJapaneseText(text) {
+      return [...(text || '')].some(isJapaneseChar);
+    }
+
+    function classifyToken(surface) {
+      if (!surface) return 'empty';
+      if (/^\s+$/u.test(surface)) return 'space';
+      if (/^[\p{P}\p{S}]+$/u.test(surface)) return 'punct';
+      if (/^\d+([.,]\d+)?$/u.test(surface)) return 'number';
+      if (/^[A-Za-z]+$/u.test(surface)) return 'latin';
+      return 'word';
+    }
+
+    // =========================
+    // [NUEVO Fase 2] Japanese tokenization layer
+    // =========================
+    function tokenizeJapaneseText(text) {
+      const source = text || '';
+      if (!source) return [];
+      if (WORD_SEGMENTER) {
+        return [...WORD_SEGMENTER.segment(source)].map((seg) => ({
+          surface: seg.segment,
+          startOffset: seg.index,
+          endOffset: seg.index + seg.segment.length,
+          isWordLike: Boolean(seg.isWordLike)
+        }));
+      }
+      // Fallback offline simple: separa espacios, puntuación y bloques de letras.
+      const fallback = [];
+      const pattern = /(\s+|[。、！？「」『』（）［］【】〈〉《》・…ー,.!?;:()[\]{}"'])/gu;
+      let cursor = 0;
+      for (const m of source.matchAll(pattern)) {
+        const idx = m.index ?? 0;
+        if (idx > cursor) {
+          fallback.push({
+            surface: source.slice(cursor, idx),
+            startOffset: cursor,
+            endOffset: idx,
+            isWordLike: true
+          });
+        }
+        fallback.push({
+          surface: m[0],
+          startOffset: idx,
+          endOffset: idx + m[0].length,
+          isWordLike: false
+        });
+        cursor = idx + m[0].length;
+      }
+      if (cursor < source.length) {
+        fallback.push({
+          surface: source.slice(cursor),
+          startOffset: cursor,
+          endOffset: source.length,
+          isWordLike: true
+        });
+      }
+      return fallback;
+    }
+
+    function buildTokenModel(rawToken, context) {
+      const surface = rawToken.surface || '';
+      const normalizedSurface = normalizeTokenSurface(surface);
+      const tokenType = classifyToken(surface);
+      const isJapanese = isJapaneseText(surface);
+      const tokenIndex = context.tokenIndex;
+      return {
+        id: `${context.bookId || 'book'}_${context.sectionIndex}_${context.sentenceIndex}_${tokenIndex}`,
+        surface,
+        normalizedSurface,
+        startOffset: rawToken.startOffset,
+        endOffset: rawToken.endOffset,
+        isJapanese,
+        sectionIndex: context.sectionIndex,
+        sentenceIndex: context.sentenceIndex,
+        tokenIndex,
+        tokenType,
+        pos: tokenType,
+        baseForm: normalizedSurface || surface,
+        reading: null
+      };
+    }
+
+    // =========================
+    // [NUEVO Fase 2] Token cache / memoization + render layer
+    // =========================
+    function cacheTokenizationResult(cacheKey, payload) {
+      state.sentenceTokenCache.set(cacheKey, payload);
+      return payload;
+    }
+
+    function shouldTokenizeCurrentView() {
+      return state.readingMode === 'sentence';
+    }
+
+    function getTokenizedSentence(bookId, sectionIndex, sentenceIndex) {
+      const section = state.sections[sectionIndex];
+      if (!section) return { sentence: '', tokens: [] };
+      const sentences = getSentencesForSection(section);
+      const sentence = sentences[sentenceIndex] || '';
+      const cacheKey = `${bookId || 'book'}::${section.path}::${sentenceIndex}::${sentence}`;
+      const cached = state.sentenceTokenCache.get(cacheKey);
+      if (cached) return cached;
+
+      const raw = tokenizeJapaneseText(sentence);
+      const tokens = raw.map((tk, tokenIndex) => buildTokenModel(tk, {
+        bookId,
+        sectionIndex,
+        sentenceIndex,
+        tokenIndex
+      }));
+      return cacheTokenizationResult(cacheKey, { sentence, tokens });
+    }
+
+    function attachTokenMetadata(token) {
+      const debug = `${token.pos}${token.baseForm ? ` · ${token.baseForm}` : ''}`;
+      return [
+        `class="token ${token.isJapanese ? 'jp' : ''} ${token.pos === 'punct' ? 'punct' : ''} ${state.settings.tokenDebug ? 'dbg' : ''}"`,
+        `data-token-id="${escapeHtml(token.id)}"`,
+        `data-section-index="${token.sectionIndex}"`,
+        `data-sentence-index="${token.sentenceIndex}"`,
+        `data-token-index="${token.tokenIndex}"`,
+        `data-surface="${escapeHtml(token.surface)}"`,
+        `data-base-form="${escapeHtml(token.baseForm || '')}"`,
+        `data-pos="${escapeHtml(token.pos || '')}"`,
+        state.settings.tokenDebug ? `data-debug="${escapeHtml(debug)}"` : ''
+      ].filter(Boolean).join(' ');
+    }
+
+    function renderSentenceTokens(tokens, options = {}) {
+      const { segmented = false } = options;
+      if (!segmented) return escapeHtml(tokens.map((t) => t.surface).join(''));
+      return `<div class="segmented-line">${
+        tokens.map((token) => `<span ${attachTokenMetadata(token)}>${escapeHtml(token.surface)}</span>`).join('')
+      }</div>`;
+    }
+
+    function renderSegmentedSentence(payload, options = {}) {
+      if (!payload?.tokens?.length) return escapeHtml(payload?.sentence || '');
+      return renderSentenceTokens(payload.tokens, options);
+    }
+
+    // =========================
     // Lógica del lector
     // =========================
     async function openReader(bookId) {
@@ -459,6 +646,7 @@
       state.readingMode = progress?.readingMode || 'page';
       state.currentSentenceIndex = progress?.currentSentenceIndex || 0;
       state.sectionSentencesCache.clear();
+      state.sentenceTokenCache.clear();
 
       await dbPut(STORES.books, { ...book, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       await saveSettings({ lastOpenedBookId: bookId });
@@ -536,7 +724,7 @@
       app.innerHTML = `
         <div class="card">
           <div class="toolbar">
-            <h1 style="margin:0;font-size:1.3rem;">📚 JP EPUB Reader (Fase 1)</h1>
+            <h1 style="margin:0;font-size:1.3rem;">📚 JP EPUB Reader (Fase 2)</h1>
             <div class="spacer"></div>
             <label><span class="hidden">Subir EPUB</span><input id="epubInput" type="file" accept=".epub,application/epub+zip" multiple /></label>
             <button id="toggleTheme" title="Cambiar tema">Tema: ${state.settings.theme === 'dark' ? 'Oscuro' : 'Claro'}</button>
@@ -590,9 +778,16 @@
     function renderSentenceMode(section) {
       const sentences = getSentencesForSection(section);
       const idx = Math.max(0, Math.min(state.currentSentenceIndex, Math.max(0, sentences.length - 1)));
-      const sentence = sentences[idx] || 'Sin texto legible en esta sección.';
+      const tokenized = shouldTokenizeCurrentView()
+        ? getTokenizedSentence(state.currentBookId, state.currentSpineIndex, idx)
+        : { sentence: sentences[idx] || '', tokens: [] };
+      const sentence = tokenized.sentence || 'Sin texto legible en esta sección.';
+      const sentenceHtml = tokenized.tokens.length
+        ? renderSegmentedSentence(tokenized, { segmented: state.settings.showSegmentation })
+        : escapeHtml(sentence);
       return `
-        <div class="sentence-box">${escapeHtml(sentence)}</div>
+        <div class="sentence-box">${sentenceHtml}</div>
+        <p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>
         <p class="status">Frase ${Math.min(idx + 1, Math.max(sentences.length, 1))} de ${Math.max(sentences.length, 1)} en esta sección.</p>
       `;
     }
@@ -627,6 +822,14 @@
               <label>Capítulo
                 <select id="sectionSelect">${state.sections.map((s, i) => `<option value="${i}">${i+1}. ${escapeHtml(s.title)}</option>`).join('')}</select>
               </label>
+              <label title="Muestra los tokens visualmente en modo frase">
+                <input id="segmentationToggle" type="checkbox" ${state.settings.showSegmentation ? 'checked' : ''} />
+                Mostrar segmentación
+              </label>
+              <label title="Muestra metadatos básicos de token (depuración)">
+                <input id="tokenDebugToggle" type="checkbox" ${state.settings.tokenDebug ? 'checked' : ''} />
+                Debug tokens
+              </label>
               <span class="status">Progreso aprox.: ${percent}% (${state.currentSpineIndex + 1}/${state.sections.length})</span>
             </div>
           </div>
@@ -654,6 +857,14 @@
       });
       $('#themeSelect').addEventListener('change', async (e) => {
         await saveSettings({ theme: e.target.value });
+        renderReaderView();
+      });
+      $('#segmentationToggle').addEventListener('change', async (e) => {
+        await saveSettings({ showSegmentation: e.target.checked });
+        renderReaderView();
+      });
+      $('#tokenDebugToggle').addEventListener('change', async (e) => {
+        await saveSettings({ tokenDebug: e.target.checked });
         renderReaderView();
       });
       $('#fontSize').addEventListener('input', async (e) => {
@@ -691,10 +902,9 @@
       }
     })();
 
-    // Punto de extensión futuro (Fase 2+): capa léxica/tokenizer
-    function getLexicalAnnotations(_text, _options) {
-      return null;
-    }
+    // Punto de extensión futuro (Fase 3+):
+    // Con los data-* de cada token ya es posible identificar token/capítulo/frase.
+    // Aquí se conectará el popup léxico, nivel de conocimiento y diccionario.
   </script>
 </body>
 </html>
