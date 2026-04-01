@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JP EPUB Reader - Fase 3</title>
+  <title>JP EPUB Reader - Fase 4</title>
   <style>
     :root {
       --bg: #f5f7fb;
@@ -119,6 +119,20 @@
       margin-top: 0.06rem;
       text-align: center;
     }
+    .field-help { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+    textarea {
+      width: 100%;
+      min-height: 72px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+      resize: vertical;
+    }
+    .meanings-list { margin: 4px 0 0; padding-left: 18px; }
+    .meanings-list li { margin: 2px 0; color: var(--muted); }
     .status { color: var(--muted); font-size: 0.9rem; }
     .hidden { display: none !important; }
   </style>
@@ -147,19 +161,21 @@
       - Segmentación de frases heurística, prioriza robustez.
       - Fase 2 agrega tokenización y segmentación visual opcional.
       - Fase 3 agrega interacción con tokens, nivel 1..5 y persistencia de vocabulario (sin diccionario).
+      - Fase 4 agrega diccionario offline, lecturas hiragana/romaji y definición personalizada del usuario.
     */
 
     // =========================
     // Config / constantes
     // =========================
     const DB_NAME = 'jp_epub_reader_db';
-    const DB_VERSION = 2;
+    const DB_VERSION = 3;
     const STORES = {
       books: 'books',
       bookFiles: 'bookFiles',
       progress: 'progress',
       settings: 'settings',
-      vocabEntries: 'vocabEntries'
+      vocabEntries: 'vocabEntries',
+      dictionaryCache: 'dictionaryCache'
     };
     const SETTINGS_KEY = 'app_settings';
     const DEFAULT_SETTINGS = {
@@ -186,12 +202,15 @@
       tokenSelection: {
         token: null,
         entry: null,
-        draftLevel: null
+        draftLevel: null,
+        dictionaryResult: null,
+        userDefinitionDraft: ''
       },
       vocabFilters: {
         query: '',
         level: 'all'
-      }
+      },
+      vocabSelection: null
     };
 
     // =========================
@@ -260,6 +279,14 @@
             vocabStore.createIndex('vocabKey', 'vocabKey', { unique: true });
             vocabStore.createIndex('updatedAt', 'updatedAt', { unique: false });
             vocabStore.createIndex('familiarityLevel', 'familiarityLevel', { unique: false });
+          }
+          const vocabStore = req.transaction.objectStore(STORES.vocabEntries);
+          if (!vocabStore.indexNames.contains('vocabKey')) vocabStore.createIndex('vocabKey', 'vocabKey', { unique: true });
+          if (!vocabStore.indexNames.contains('updatedAt')) vocabStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          if (!vocabStore.indexNames.contains('familiarityLevel')) vocabStore.createIndex('familiarityLevel', 'familiarityLevel', { unique: false });
+          if (!db.objectStoreNames.contains(STORES.dictionaryCache)) {
+            const dictCacheStore = db.createObjectStore(STORES.dictionaryCache, { keyPath: 'lookupKey' });
+            dictCacheStore.createIndex('updatedAt', 'updatedAt', { unique: false });
           }
         };
         req.onsuccess = () => resolve(req.result);
@@ -743,7 +770,14 @@
         surface: token.surface || existing?.surface || identity.normalizedSurface,
         lemma: token.baseForm || existing?.lemma || null,
         reading: token.reading || existing?.reading || null,
+        readingKana: existing?.readingKana || convertReadingToHiragana(token.reading || existing?.reading || null),
+        readingRomaji: existing?.readingRomaji || convertReadingToRomaji(token.reading || existing?.reading || null),
         pos: token.pos || existing?.pos || null,
+        defaultDefinition: existing?.defaultDefinition || null,
+        meanings: existing?.meanings || [],
+        userDefinition: existing?.userDefinition || null,
+        dictionarySource: existing?.dictionarySource || null,
+        enrichedAt: existing?.enrichedAt || null,
         familiarityLevel: existing?.familiarityLevel ?? null,
         firstSeenAt: existing?.firstSeenAt || now,
         lastSeenAt: now,
@@ -774,7 +808,7 @@
     // [NUEVO Fase 3] Token interaction + panel + familiarity rendering
     // =========================
     function closeTokenPanel() {
-      state.tokenSelection = { token: null, entry: null, draftLevel: null };
+      state.tokenSelection = { token: null, entry: null, draftLevel: null, dictionaryResult: null, userDefinitionDraft: '' };
       const host = $('#tokenPanelHost');
       if (host) host.innerHTML = '';
       const readerContent = $('.reader-content');
@@ -788,31 +822,45 @@
     function renderTokenPanel() {
       const host = $('#tokenPanelHost');
       if (!host) return;
-      const { token, entry, draftLevel } = state.tokenSelection;
+      const { token, entry, draftLevel, dictionaryResult, userDefinitionDraft } = state.tokenSelection;
       if (!token || !entry) {
         host.innerHTML = '';
         return;
       }
+      const meanings = entry.meanings || dictionaryResult?.meanings || [];
       host.innerHTML = `
-        <aside class="token-panel" role="dialog" aria-label="Detalle de token">
+        <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
           <div class="toolbar" style="margin-bottom: 8px;">
-            <h3>Token seleccionado</h3>
+            <h3>Palabra seleccionada</h3>
             <div class="spacer"></div>
             <button id="closeTokenPanelBtn">Cerrar</button>
           </div>
           <div class="token-grid">
-            <span class="k">surface</span><span class="v">${escapeHtml(token.surface || '—')}</span>
-            <span class="k">normalizedSurface</span><span class="v">${escapeHtml(getTokenIdentity(token).normalizedSurface || '—')}</span>
-            <span class="k">lemma/baseForm</span><span class="v">${escapeHtml(token.baseForm || '—')}</span>
-            <span class="k">reading</span><span class="v">${escapeHtml(token.reading || '—')}</span>
-            <span class="k">pos</span><span class="v">${escapeHtml(token.pos || '—')}</span>
+            <span class="k">surface</span><span class="v">${escapeHtml(entry.surface || token.surface || '—')}</span>
+            <span class="k">lemma/baseForm</span><span class="v">${escapeHtml(entry.lemma || token.baseForm || '—')}</span>
+            <span class="k">hiragana</span><span class="v">${escapeHtml(entry.readingKana || '—')}</span>
+            <span class="k">romaji</span><span class="v">${escapeHtml(entry.readingRomaji || '—')}</span>
+            <span class="k">pos</span><span class="v">${escapeHtml(entry.pos || '—')}</span>
+            <span class="k">definición sugerida</span><span class="v">${escapeHtml(entry.defaultDefinition || 'Sin definición sugerida disponible')}</span>
             <span class="k">vocabKey</span><span class="v">${escapeHtml(entry.vocabKey)}</span>
+          </div>
+          <div style="margin-top:8px;">
+            <div class="k">Acepciones secundarias</div>
+            ${renderMeaningsList(meanings)}
           </div>
           <div class="level-picker" aria-label="Nivel de conocimiento">
             ${[1,2,3,4,5].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
             <button class="level-btn ${draftLevel == null ? 'active' : ''}" data-level="">Sin valorar</button>
           </div>
-          <p class="status" style="margin: 8px 0 0;">Clicks: ${entry.timesClicked || 0} · Última vez: ${formatDate(entry.lastSeenAt)}</p>
+          <div style="margin-top:8px;">
+            <label for="userDefinitionInput"><strong>Definición personalizada</strong></label>
+            <textarea id="userDefinitionInput" placeholder="Escribe tu definición o nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
+            <div class="toolbar" style="margin-top:8px;">
+              <button id="saveUserDefinitionBtn" class="primary">Guardar definición</button>
+            </div>
+            <p class="field-help">La definición personalizada siempre tiene prioridad visual sobre tu comprensión personal y no reemplaza la sugerida del diccionario.</p>
+          </div>
+          <p class="status" style="margin: 8px 0 0;">Clicks: ${entry.timesClicked || 0} · Última vez: ${formatDate(entry.lastSeenAt)} · Fuente diccionario: ${escapeHtml(entry.dictionarySource || 'N/A')}</p>
         </aside>
       `;
       const readerContent = $('.reader-content');
@@ -828,6 +876,17 @@
         applyFamiliarityStyles(updated.vocabKey, updated.familiarityLevel);
         renderTokenPanel();
       }));
+      $('#userDefinitionInput')?.addEventListener('input', (e) => {
+        state.tokenSelection.userDefinitionDraft = e.target.value || '';
+      });
+      $('#saveUserDefinitionBtn')?.addEventListener('click', async () => {
+        const text = $('#userDefinitionInput')?.value || '';
+        const updated = await updateUserDefinition(entry.vocabKey, text);
+        if (!updated) return;
+        state.tokenSelection.entry = updated;
+        state.tokenSelection.userDefinitionDraft = updated.userDefinition || '';
+        renderTokenPanel();
+      });
     }
 
     function applyFamiliarityStyles(vocabKey, level) {
@@ -839,12 +898,20 @@
 
     async function openTokenPanel(token, context = {}) {
       if (!isInteractiveToken(token)) return;
-      const entry = await upsertVocabEntryFromToken(token, context);
+      let entry = await upsertVocabEntryFromToken(token, context);
       if (!entry) return;
+      const request = buildDictionaryLookupRequest(token);
+      const dictionaryResult = await lookupDictionaryEntry(request, token, context);
+      const enriched = enrichVocabEntryWithDictionaryData(entry, dictionaryResult, token);
+      await dbPut(STORES.vocabEntries, enriched);
+      state.vocabMap.set(enriched.vocabKey, enriched);
+      entry = enriched;
       state.tokenSelection = {
         token,
         entry,
-        draftLevel: entry.familiarityLevel ?? null
+        draftLevel: entry.familiarityLevel ?? null,
+        dictionaryResult,
+        userDefinitionDraft: entry.userDefinition || ''
       };
       renderTokenPanel();
       applyFamiliarityStyles(entry.vocabKey, entry.familiarityLevel);
@@ -867,6 +934,203 @@
         sentenceIndex: Number(el.dataset.sentenceIndex),
         tokenIndex: Number(el.dataset.tokenIndex)
       };
+    }
+
+    // =========================
+    // [NUEVO Fase 4] Lookup normalization + kana/romaji utilities
+    // =========================
+    function katakanaToHiragana(text) {
+      return (text || '').replace(/[ァ-ヶ]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
+    }
+
+    function convertReadingToHiragana(reading) {
+      const normalized = normalizeTokenSurface(reading || '');
+      if (!normalized) return null;
+      return katakanaToHiragana(normalized);
+    }
+
+    const ROMAJI_DIGRAPHS = {
+      きゃ:'kya',きゅ:'kyu',きょ:'kyo',しゃ:'sha',しゅ:'shu',しょ:'sho',ちゃ:'cha',ちゅ:'chu',ちょ:'cho',
+      にゃ:'nya',にゅ:'nyu',にょ:'nyo',ひゃ:'hya',ひゅ:'hyu',ひょ:'hyo',みゃ:'mya',みゅ:'myu',みょ:'myo',
+      りゃ:'rya',りゅ:'ryu',りょ:'ryo',ぎゃ:'gya',ぎゅ:'gyu',ぎょ:'gyo',じゃ:'ja',じゅ:'ju',じょ:'jo',
+      びゃ:'bya',びゅ:'byu',びょ:'byo',ぴゃ:'pya',ぴゅ:'pyu',ぴょ:'pyo'
+    };
+    const ROMAJI_SINGLE = {
+      あ:'a',い:'i',う:'u',え:'e',お:'o',か:'ka',き:'ki',く:'ku',け:'ke',こ:'ko',さ:'sa',し:'shi',す:'su',せ:'se',そ:'so',
+      た:'ta',ち:'chi',つ:'tsu',て:'te',と:'to',な:'na',に:'ni',ぬ:'nu',ね:'ne',の:'no',は:'ha',ひ:'hi',ふ:'fu',へ:'he',ほ:'ho',
+      ま:'ma',み:'mi',む:'mu',め:'me',も:'mo',や:'ya',ゆ:'yu',よ:'yo',ら:'ra',り:'ri',る:'ru',れ:'re',ろ:'ro',
+      わ:'wa',を:'wo',ん:'n',が:'ga',ぎ:'gi',ぐ:'gu',げ:'ge',ご:'go',ざ:'za',じ:'ji',ず:'zu',ぜ:'ze',ぞ:'zo',
+      だ:'da',ぢ:'ji',づ:'zu',で:'de',ど:'do',ば:'ba',び:'bi',ぶ:'bu',べ:'be',ぼ:'bo',ぱ:'pa',ぴ:'pi',ぷ:'pu',ぺ:'pe',ぽ:'po',
+      ぁ:'a',ぃ:'i',ぅ:'u',ぇ:'e',ぉ:'o',ゔ:'vu',ー:'-'
+    };
+
+    function convertReadingToRomaji(reading) {
+      const hira = convertReadingToHiragana(reading);
+      if (!hira) return null;
+      let out = '';
+      for (let i = 0; i < hira.length; i++) {
+        const current = hira[i];
+        const nextPair = hira.slice(i, i + 2);
+        if (ROMAJI_DIGRAPHS[nextPair]) { out += ROMAJI_DIGRAPHS[nextPair]; i++; continue; }
+        if (current === 'っ') {
+          const next = ROMAJI_DIGRAPHS[hira.slice(i + 1, i + 3)] || ROMAJI_SINGLE[hira[i + 1]] || '';
+          out += next ? next[0] : '';
+          continue;
+        }
+        out += ROMAJI_SINGLE[current] || current;
+      }
+      return out.replace(/-+/g, '');
+    }
+
+    function normalizeLookupKey(value) {
+      return normalizeTokenSurface(value || '').toLowerCase();
+    }
+
+    // =========================
+    // [NUEVO Fase 4] Dictionary provider layer (offline)
+    // =========================
+    const OFFLINE_DICTIONARY_ENTRIES = [
+      { lemma: '私', surface: '私', readingKana: 'わたし', pos: 'pronombre', meanings: ['yo', 'me'], source: 'embedded-mini-v1' },
+      { lemma: '日本', surface: '日本', readingKana: 'にほん', pos: 'nombre propio', meanings: ['Japón'], source: 'embedded-mini-v1' },
+      { lemma: '学生', surface: '学生', readingKana: 'がくせい', pos: 'sustantivo', meanings: ['estudiante'], source: 'embedded-mini-v1' },
+      { lemma: '先生', surface: '先生', readingKana: 'せんせい', pos: 'sustantivo', meanings: ['profesor', 'maestro'], source: 'embedded-mini-v1' },
+      { lemma: '食べる', surface: '食べる', readingKana: 'たべる', pos: 'verbo ichidan', meanings: ['comer'], source: 'embedded-mini-v1' },
+      { lemma: '行く', surface: '行く', readingKana: 'いく', pos: 'verbo godan', meanings: ['ir'], source: 'embedded-mini-v1' },
+      { lemma: '見る', surface: '見る', readingKana: 'みる', pos: 'verbo ichidan', meanings: ['ver', 'mirar'], source: 'embedded-mini-v1' },
+      { lemma: '読む', surface: '読む', readingKana: 'よむ', pos: 'verbo godan', meanings: ['leer'], source: 'embedded-mini-v1' },
+      { lemma: '本', surface: '本', readingKana: 'ほん', pos: 'sustantivo', meanings: ['libro'], source: 'embedded-mini-v1' },
+      { lemma: '今日', surface: '今日', readingKana: 'きょう', pos: 'adverbio temporal', meanings: ['hoy'], source: 'embedded-mini-v1' },
+      { lemma: '明日', surface: '明日', readingKana: 'あした', pos: 'adverbio temporal', meanings: ['mañana'], source: 'embedded-mini-v1' },
+      { lemma: '猫', surface: '猫', readingKana: 'ねこ', pos: 'sustantivo', meanings: ['gato'], source: 'embedded-mini-v1' },
+      { lemma: '犬', surface: '犬', readingKana: 'いぬ', pos: 'sustantivo', meanings: ['perro'], source: 'embedded-mini-v1' },
+      { lemma: '大きい', surface: '大きい', readingKana: 'おおきい', pos: 'adjetivo i', meanings: ['grande'], source: 'embedded-mini-v1' },
+      { lemma: '小さい', surface: '小さい', readingKana: 'ちいさい', pos: 'adjetivo i', meanings: ['pequeño'], source: 'embedded-mini-v1' }
+    ];
+
+    const OFFLINE_DICTIONARY_INDEX = (() => {
+      const byLemma = new Map();
+      const bySurface = new Map();
+      for (const entry of OFFLINE_DICTIONARY_ENTRIES) {
+        const lemmaKey = normalizeLookupKey(entry.lemma);
+        const surfaceKey = normalizeLookupKey(entry.surface);
+        if (lemmaKey) byLemma.set(lemmaKey, [...(byLemma.get(lemmaKey) || []), entry]);
+        if (surfaceKey) bySurface.set(surfaceKey, [...(bySurface.get(surfaceKey) || []), entry]);
+      }
+      return { byLemma, bySurface };
+    })();
+
+    function lookupByLemma(lemma, reading) {
+      const key = normalizeLookupKey(lemma);
+      const entries = OFFLINE_DICTIONARY_INDEX.byLemma.get(key) || [];
+      if (!entries.length) return [];
+      if (!reading) return entries;
+      const hira = convertReadingToHiragana(reading);
+      return [...entries].sort((a, b) => Number(convertReadingToHiragana(b.readingKana || '') === hira) - Number(convertReadingToHiragana(a.readingKana || '') === hira));
+    }
+
+    function lookupBySurface(surface) {
+      const key = normalizeLookupKey(surface);
+      return OFFLINE_DICTIONARY_INDEX.bySurface.get(key) || [];
+    }
+
+    function chooseBestDictionaryEntry(entries, token) {
+      if (!entries?.length) return null;
+      const lemma = normalizeLookupKey(token?.baseForm);
+      const surface = normalizeLookupKey(token?.surface);
+      return [...entries].sort((a, b) => {
+        const aLemma = normalizeLookupKey(a.lemma) === lemma ? 2 : 0;
+        const bLemma = normalizeLookupKey(b.lemma) === lemma ? 2 : 0;
+        const aSurface = normalizeLookupKey(a.surface) === surface ? 1 : 0;
+        const bSurface = normalizeLookupKey(b.surface) === surface ? 1 : 0;
+        return (bLemma + bSurface) - (aLemma + aSurface);
+      })[0];
+    }
+
+    function buildDictionaryLookupRequest(token) {
+      return {
+        surface: token?.surface || '',
+        lemma: token?.baseForm || '',
+        reading: token?.reading || null
+      };
+    }
+
+    async function readDictionaryCache(lookupKey) {
+      if (!lookupKey) return null;
+      return dbGet(STORES.dictionaryCache, lookupKey);
+    }
+
+    async function writeDictionaryCache(lookupKey, result) {
+      if (!lookupKey || !result) return;
+      await dbPut(STORES.dictionaryCache, { lookupKey, result, updatedAt: new Date().toISOString() });
+    }
+
+    async function lookupDictionaryEntry(request, token, context = {}) {
+      const lookupKey = [normalizeLookupKey(request.lemma), normalizeLookupKey(request.surface), normalizeLookupKey(request.reading)].filter(Boolean).join('|');
+      const cached = await readDictionaryCache(lookupKey);
+      if (cached?.result) return cached.result;
+
+      let candidates = [];
+      if (request.lemma) candidates = lookupByLemma(request.lemma, request.reading);
+      if (!candidates.length && request.surface) candidates = lookupBySurface(request.surface);
+
+      const best = chooseBestDictionaryEntry(candidates, token);
+      const result = best ? {
+        found: true,
+        lookupKey,
+        source: best.source || 'embedded',
+        queriedSurface: request.surface || null,
+        lemma: best.lemma || request.lemma || null,
+        readingKana: convertReadingToHiragana(best.readingKana || request.reading || null),
+        readingRomaji: convertReadingToRomaji(best.readingKana || request.reading || null),
+        pos: best.pos || token?.pos || null,
+        meanings: best.meanings || [],
+        bestGloss: (best.meanings || [])[0] || null,
+        alternatives: candidates.filter((entry) => entry !== best).slice(0, 3)
+      } : {
+        found: false,
+        lookupKey,
+        queriedSurface: request.surface || null,
+        lemma: request.lemma || null,
+        readingKana: convertReadingToHiragana(request.reading),
+        readingRomaji: convertReadingToRomaji(request.reading),
+        pos: token?.pos || null,
+        meanings: [],
+        bestGloss: null,
+        alternatives: []
+      };
+      await writeDictionaryCache(lookupKey, result);
+      return result;
+    }
+
+    function enrichVocabEntryWithDictionaryData(vocabEntry, dictionaryEntry, token) {
+      const now = new Date().toISOString();
+      return {
+        ...vocabEntry,
+        surface: vocabEntry.surface || token?.surface || dictionaryEntry?.queriedSurface || vocabEntry.normalizedKey,
+        lemma: dictionaryEntry?.lemma || vocabEntry.lemma || token?.baseForm || null,
+        readingKana: dictionaryEntry?.readingKana || vocabEntry.readingKana || null,
+        readingRomaji: dictionaryEntry?.readingRomaji || vocabEntry.readingRomaji || null,
+        pos: dictionaryEntry?.pos || vocabEntry.pos || token?.pos || null,
+        defaultDefinition: dictionaryEntry?.bestGloss || vocabEntry.defaultDefinition || null,
+        meanings: dictionaryEntry?.meanings?.length ? dictionaryEntry.meanings : (vocabEntry.meanings || []),
+        dictionarySource: dictionaryEntry?.source || vocabEntry.dictionarySource || null,
+        enrichedAt: dictionaryEntry?.found ? now : (vocabEntry.enrichedAt || null),
+        updatedAt: now
+      };
+    }
+
+    async function updateUserDefinition(vocabKey, text) {
+      const existing = await loadVocabEntryByKey(vocabKey);
+      if (!existing) return null;
+      const next = { ...existing, userDefinition: (text || '').trim() || null, updatedAt: new Date().toISOString() };
+      await dbPut(STORES.vocabEntries, next);
+      state.vocabMap.set(next.vocabKey, next);
+      return next;
+    }
+
+    function renderMeaningsList(meanings) {
+      if (!meanings?.length) return '<p class="status">Sin acepciones secundarias.</p>';
+      return `<ul class="meanings-list">${meanings.slice(1, 5).map((meaning) => `<li>${escapeHtml(meaning)}</li>`).join('') || '<li>—</li>'}</ul>`;
     }
 
     // =========================
@@ -962,7 +1226,7 @@
           : String(entry.familiarityLevel ?? 'none') === String(levelFilter);
         if (!levelOk) return false;
         if (!q) return true;
-        const haystack = [entry.surface, entry.lemma, entry.reading, entry.normalizedKey].filter(Boolean).join(' ').toLowerCase();
+        const haystack = [entry.surface, entry.lemma, entry.reading, entry.readingKana, entry.readingRomaji, entry.defaultDefinition, entry.userDefinition, entry.normalizedKey].filter(Boolean).join(' ').toLowerCase();
         return haystack.includes(q);
       });
     }
@@ -981,9 +1245,9 @@
         <div class="card">
           <div class="toolbar">
             <button id="backLibraryBtn">← Biblioteca</button>
-            <h1 style="margin:0;font-size:1.2rem;">🧠 Vocabulario (Fase 3)</h1>
+            <h1 style="margin:0;font-size:1.2rem;">🧠 Vocabulario (Fase 4)</h1>
             <div class="spacer"></div>
-            <input id="vocabSearch" placeholder="Buscar surface / lemma / reading" value="${escapeHtml(state.vocabFilters.query)}" />
+            <input id="vocabSearch" placeholder="Buscar surface / lemma / hiragana / romaji / definición" value="${escapeHtml(state.vocabFilters.query)}" />
             <label>Nivel
               <select id="vocabLevelFilter">
                 <option value="all">Todos</option>
@@ -992,21 +1256,28 @@
               </select>
             </label>
           </div>
-          <p class="status">Entradas: ${entries.length} (total: ${allEntries.length}). Sin diccionario ni traducciones en Fase 3.</p>
+          <p class="status">Entradas: ${entries.length} (total: ${allEntries.length}). Con diccionario offline local y definición personalizada de usuario (Fase 4).</p>
           <div class="vocab-list">
             ${entries.length ? entries.map((entry) => `
               <article class="vocab-item">
                 <div class="vocab-main">
                   <strong>${escapeHtml(entry.surface || entry.normalizedKey)}</strong>
-                  <span class="badge">${escapeHtml(entry.lemma || 'lemma: —')}</span>
-                  <span class="badge">${escapeHtml(entry.reading || 'reading: —')}</span>
+                  <span class="badge">${escapeHtml(`lemma: ${entry.lemma || '—'}`)}</span>
+                  <span class="badge">${escapeHtml(`hiragana: ${entry.readingKana || '—'}`)}</span>
+                  <span class="badge">${escapeHtml(`romaji: ${entry.readingRomaji || '—'}`)}</span>
                   <span class="badge">${escapeHtml(entry.pos || 'pos: —')}</span>
                   <span class="badge level">Nivel: ${entry.familiarityLevel ?? 'Sin valorar'}</span>
                 </div>
+                <p class="meta"><strong>Sugerida:</strong> ${escapeHtml(entry.defaultDefinition || 'Sin definición sugerida disponible')}</p>
+                <p class="meta"><strong>Tu definición:</strong> ${escapeHtml(entry.userDefinition || '—')}</p>
                 <p class="meta">Apariciones pulsadas: ${entry.timesClicked || 0} · Primera vez: ${formatDate(entry.firstSeenAt)} · Última actualización: ${formatDate(entry.updatedAt)}</p>
                 <div class="toolbar" style="margin-top: 6px;">
                   ${[1,2,3,4,5].map((lvl) => `<button data-vocab-level="${lvl}" data-vocab-key="${escapeHtml(entry.vocabKey)}">${lvl}</button>`).join('')}
                   <button data-vocab-level="" data-vocab-key="${escapeHtml(entry.vocabKey)}">Sin valorar</button>
+                </div>
+                <textarea data-vocab-definition="1" data-vocab-key="${escapeHtml(entry.vocabKey)}" placeholder="Definición personalizada...">${escapeHtml(entry.userDefinition || '')}</textarea>
+                <div class="toolbar" style="margin-top: 6px;">
+                  <button class="primary" data-save-vocab-definition="1" data-vocab-key="${escapeHtml(entry.vocabKey)}">Guardar definición</button>
                 </div>
               </article>
             `).join('') : `<div class="empty">Todavía no has seleccionado palabras en el lector.</div>`}
@@ -1023,9 +1294,15 @@
         state.vocabFilters.level = e.target.value;
         renderVocabularyView();
       });
-      app.querySelectorAll('[data-vocab-key]').forEach((btn) => btn.addEventListener('click', () => {
+      app.querySelectorAll('[data-vocab-level]').forEach((btn) => btn.addEventListener('click', () => {
         const level = btn.dataset.vocabLevel ? Number(btn.dataset.vocabLevel) : null;
         updateVocabularyEntryLevel(btn.dataset.vocabKey, level);
+      }));
+      app.querySelectorAll('[data-save-vocab-definition]').forEach((btn) => btn.addEventListener('click', async () => {
+        const key = btn.dataset.vocabKey;
+        const textarea = app.querySelector(`textarea[data-vocab-definition][data-vocab-key="${CSS.escape(key)}"]`);
+        await updateUserDefinition(key, textarea?.value || '');
+        await renderVocabularyView();
       }));
     }
 
@@ -1049,7 +1326,7 @@
       app.innerHTML = `
         <div class="card">
           <div class="toolbar">
-            <h1 style="margin:0;font-size:1.3rem;">📚 JP EPUB Reader (Fase 3)</h1>
+            <h1 style="margin:0;font-size:1.3rem;">📚 JP EPUB Reader (Fase 4)</h1>
             <div class="spacer"></div>
             <button id="openVocabBtn">Vocabulario</button>
             <label><span class="hidden">Subir EPUB</span><input id="epubInput" type="file" accept=".epub,application/epub+zip" multiple /></label>
@@ -1246,9 +1523,10 @@
       }
     })();
 
-    // Punto de extensión futuro (Fase 4):
-    // El panel de token ya guarda familiaridad y metadatos básicos.
-    // Aquí se podrá conectar lookup de diccionario/definiciones sin romper la base Fase 3.
+    // Nota Fase 4:
+    // Diccionario offline embebido (mini) + cache técnico en IndexedDB + definición personalizada de usuario.
+    // Limitaciones conocidas: cobertura lexical acotada y desambiguación heurística (sin analizador morfológico completo).
+    // Extensión futura: importar dictionary packs locales más grandes sin tocar la UI.
   </script>
 </body>
 </html>
