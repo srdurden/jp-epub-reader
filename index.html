@@ -168,14 +168,17 @@
     // Config / constantes
     // =========================
     const DB_NAME = 'jp_epub_reader_db';
-    const DB_VERSION = 3;
+    const DB_VERSION = 4;
     const STORES = {
       books: 'books',
       bookFiles: 'bookFiles',
       progress: 'progress',
       settings: 'settings',
       vocabEntries: 'vocabEntries',
-      dictionaryCache: 'dictionaryCache'
+      dictionaryCache: 'dictionaryCache',
+      dictionaryEntries: 'dictionaryEntries',
+      dictionaryPacks: 'dictionaryPacks',
+      dictionaryMeta: 'dictionaryMeta'
     };
     const SETTINGS_KEY = 'app_settings';
     const DEFAULT_SETTINGS = {
@@ -210,7 +213,13 @@
         query: '',
         level: 'all'
       },
-      vocabSelection: null
+      vocabSelection: null,
+      dictionaryStatus: {
+        loadedEntries: 0,
+        packsCount: 0,
+        lastImportedAt: null,
+        importMessage: ''
+      }
     };
 
     // =========================
@@ -288,6 +297,25 @@
             const dictCacheStore = db.createObjectStore(STORES.dictionaryCache, { keyPath: 'lookupKey' });
             dictCacheStore.createIndex('updatedAt', 'updatedAt', { unique: false });
           }
+          if (!db.objectStoreNames.contains(STORES.dictionaryEntries)) {
+            const dictEntries = db.createObjectStore(STORES.dictionaryEntries, { keyPath: 'id' });
+            dictEntries.createIndex('lemmaKey', 'lemmaKey', { unique: false });
+            dictEntries.createIndex('surfaceKey', 'surfaceKey', { unique: false });
+            dictEntries.createIndex('readingKey', 'readingKey', { unique: false });
+            dictEntries.createIndex('packId', 'packId', { unique: false });
+          }
+          const dictionaryEntriesStore = req.transaction.objectStore(STORES.dictionaryEntries);
+          if (!dictionaryEntriesStore.indexNames.contains('lemmaKey')) dictionaryEntriesStore.createIndex('lemmaKey', 'lemmaKey', { unique: false });
+          if (!dictionaryEntriesStore.indexNames.contains('surfaceKey')) dictionaryEntriesStore.createIndex('surfaceKey', 'surfaceKey', { unique: false });
+          if (!dictionaryEntriesStore.indexNames.contains('readingKey')) dictionaryEntriesStore.createIndex('readingKey', 'readingKey', { unique: false });
+          if (!dictionaryEntriesStore.indexNames.contains('packId')) dictionaryEntriesStore.createIndex('packId', 'packId', { unique: false });
+          if (!db.objectStoreNames.contains(STORES.dictionaryPacks)) {
+            const packsStore = db.createObjectStore(STORES.dictionaryPacks, { keyPath: 'id' });
+            packsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(STORES.dictionaryMeta)) {
+            db.createObjectStore(STORES.dictionaryMeta, { keyPath: 'id' });
+          }
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -341,6 +369,35 @@
         const req = tx.objectStore(storeName).index(indexName).get(key);
         req.onsuccess = () => resolve(req.result || null);
         req.onerror = () => reject(req.error);
+      });
+    }
+
+
+    async function dbGetAllByIndex(storeName, indexName, key) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).index(indexName).getAll(IDBKeyRange.only(key));
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbDeleteWhereIndexEquals(storeName, indexName, key) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const index = tx.objectStore(storeName).index(indexName);
+        const cursorReq = index.openCursor(IDBKeyRange.only(key));
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          }
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
       });
     }
 
@@ -828,6 +885,7 @@
         return;
       }
       const meanings = entry.meanings || dictionaryResult?.meanings || [];
+      const alternatives = dictionaryResult?.alternatives || [];
       host.innerHTML = `
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
           <div class="toolbar" style="margin-bottom: 8px;">
@@ -841,12 +899,16 @@
             <span class="k">hiragana</span><span class="v">${escapeHtml(entry.readingKana || '—')}</span>
             <span class="k">romaji</span><span class="v">${escapeHtml(entry.readingRomaji || '—')}</span>
             <span class="k">pos</span><span class="v">${escapeHtml(entry.pos || '—')}</span>
-            <span class="k">definición sugerida</span><span class="v">${escapeHtml(entry.defaultDefinition || 'Sin definición sugerida disponible')}</span>
+            <span class="k">definición sugerida</span><span class="v">${escapeHtml(entry.defaultDefinition || 'No dictionary entry found')}</span>
             <span class="k">vocabKey</span><span class="v">${escapeHtml(entry.vocabKey)}</span>
           </div>
           <div style="margin-top:8px;">
             <div class="k">Acepciones secundarias</div>
             ${renderMeaningsList(meanings)}
+          </div>
+          <div style="margin-top:8px;">
+            <div class="k">Alternativas de diccionario</div>
+            ${alternatives.length ? `<ul class="meanings-list">${alternatives.map((alt) => `<li><strong>${escapeHtml(alt.lemma || alt.surface || '—')}</strong> · ${escapeHtml((alt.meanings || [])[0] || '—')}</li>`).join('')}</ul>` : '<p class="status">Sin alternativas adicionales.</p>'}
           </div>
           <div class="level-picker" aria-label="Nivel de conocimiento">
             ${[1,2,3,4,5].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
@@ -987,70 +1049,209 @@
     }
 
     // =========================
-    // [NUEVO Fase 4] Dictionary provider layer (offline)
+    // [NUEVO Fase 4] Dictionary provider layer (offline, estilo Rikaikun)
     // =========================
-    const OFFLINE_DICTIONARY_ENTRIES = [
-      { lemma: '私', surface: '私', readingKana: 'わたし', pos: 'pronombre', meanings: ['yo', 'me'], source: 'embedded-mini-v1' },
-      { lemma: '日本', surface: '日本', readingKana: 'にほん', pos: 'nombre propio', meanings: ['Japón'], source: 'embedded-mini-v1' },
-      { lemma: '学生', surface: '学生', readingKana: 'がくせい', pos: 'sustantivo', meanings: ['estudiante'], source: 'embedded-mini-v1' },
-      { lemma: '先生', surface: '先生', readingKana: 'せんせい', pos: 'sustantivo', meanings: ['profesor', 'maestro'], source: 'embedded-mini-v1' },
-      { lemma: '食べる', surface: '食べる', readingKana: 'たべる', pos: 'verbo ichidan', meanings: ['comer'], source: 'embedded-mini-v1' },
-      { lemma: '行く', surface: '行く', readingKana: 'いく', pos: 'verbo godan', meanings: ['ir'], source: 'embedded-mini-v1' },
-      { lemma: '見る', surface: '見る', readingKana: 'みる', pos: 'verbo ichidan', meanings: ['ver', 'mirar'], source: 'embedded-mini-v1' },
-      { lemma: '読む', surface: '読む', readingKana: 'よむ', pos: 'verbo godan', meanings: ['leer'], source: 'embedded-mini-v1' },
-      { lemma: '本', surface: '本', readingKana: 'ほん', pos: 'sustantivo', meanings: ['libro'], source: 'embedded-mini-v1' },
-      { lemma: '今日', surface: '今日', readingKana: 'きょう', pos: 'adverbio temporal', meanings: ['hoy'], source: 'embedded-mini-v1' },
-      { lemma: '明日', surface: '明日', readingKana: 'あした', pos: 'adverbio temporal', meanings: ['mañana'], source: 'embedded-mini-v1' },
-      { lemma: '猫', surface: '猫', readingKana: 'ねこ', pos: 'sustantivo', meanings: ['gato'], source: 'embedded-mini-v1' },
-      { lemma: '犬', surface: '犬', readingKana: 'いぬ', pos: 'sustantivo', meanings: ['perro'], source: 'embedded-mini-v1' },
-      { lemma: '大きい', surface: '大きい', readingKana: 'おおきい', pos: 'adjetivo i', meanings: ['grande'], source: 'embedded-mini-v1' },
-      { lemma: '小さい', surface: '小さい', readingKana: 'ちいさい', pos: 'adjetivo i', meanings: ['pequeño'], source: 'embedded-mini-v1' }
-    ];
+    // Formato esperado para dictionary pack local (JSON):
+    // {
+    //   "pack": {"id": "jmdict-lite", "name": "JMdict Lite", "version": "2026-01"},
+    //   "entries": [
+    //     {"lemma": "思う", "surface": "思う", "reading": "おもう", "pos": ["v5u"], "glosses": ["to think"]}
+    //   ]
+    // }
+    // Notas:
+    // - Las glosses se muestran tal cual vengan de la fuente (normalmente inglés en JMdict/EDICT).
+    // - El ranking prioriza lemma exacto, luego surface, luego reading y deinflection.
+    // - La desinflexión es básica y extensible (no reemplaza un analizador morfológico completo).
 
-    const OFFLINE_DICTIONARY_INDEX = (() => {
-      const byLemma = new Map();
-      const bySurface = new Map();
-      for (const entry of OFFLINE_DICTIONARY_ENTRIES) {
-        const lemmaKey = normalizeLookupKey(entry.lemma);
-        const surfaceKey = normalizeLookupKey(entry.surface);
-        if (lemmaKey) byLemma.set(lemmaKey, [...(byLemma.get(lemmaKey) || []), entry]);
-        if (surfaceKey) bySurface.set(surfaceKey, [...(bySurface.get(surfaceKey) || []), entry]);
+    const EMBEDDED_FALLBACK_PACK = {
+      id: 'embedded-fallback-v2',
+      name: 'Embedded fallback dictionary',
+      version: '2026-04-01',
+      source: 'embedded-fallback',
+      entries: [
+        { lemma: '思う', surface: '思う', reading: 'おもう', pos: ['v5u'], glosses: ['to think', 'to believe'] },
+        { lemma: '考える', surface: '考える', reading: 'かんがえる', pos: ['v1'], glosses: ['to think about', 'to consider'] },
+        { lemma: '言う', surface: '言う', reading: 'いう', pos: ['v5u'], glosses: ['to say', 'to tell'] },
+        { lemma: '食べる', surface: '食べる', reading: 'たべる', pos: ['v1'], glosses: ['to eat'] },
+        { lemma: 'ある', surface: 'ある', reading: 'ある', pos: ['v5r-i'], glosses: ['to exist (inanimate)', 'to have'] },
+        { lemma: 'する', surface: 'する', reading: 'する', pos: ['vs-i'], glosses: ['to do', 'to make'] },
+        { lemma: '行く', surface: '行く', reading: 'いく', pos: ['v5k-s'], glosses: ['to go'] },
+        { lemma: '見る', surface: '見る', reading: 'みる', pos: ['v1'], glosses: ['to see', 'to watch'] },
+        { lemma: '読む', surface: '読む', reading: 'よむ', pos: ['v5m'], glosses: ['to read'] },
+        { lemma: '本', surface: '本', reading: 'ほん', pos: ['n'], glosses: ['book'] }
+      ]
+    };
+
+    function normalizeGlosses(raw) {
+      if (!Array.isArray(raw)) return [];
+      return raw.map((g) => String(g || '').trim()).filter(Boolean).slice(0, 10);
+    }
+
+    function normalizeDictionaryEntry(rawEntry, packMeta = {}) {
+      const lemma = normalizeTokenSurface(rawEntry?.lemma || rawEntry?.base || rawEntry?.headword || '');
+      const surface = normalizeTokenSurface(rawEntry?.surface || rawEntry?.word || lemma || '');
+      const readingRaw = rawEntry?.reading || rawEntry?.readingKana || rawEntry?.kana || null;
+      const readingKana = convertReadingToHiragana(readingRaw || null);
+      const glosses = normalizeGlosses(rawEntry?.glosses || rawEntry?.meanings || rawEntry?.senses || []);
+      const posRaw = Array.isArray(rawEntry?.pos) ? rawEntry.pos.join(', ') : (rawEntry?.pos || rawEntry?.partOfSpeech || null);
+      return {
+        id: rawEntry?.id || `${packMeta.id || 'pack'}:${lemma || surface}:${readingKana || ''}:${Math.random().toString(36).slice(2, 8)}`,
+        packId: packMeta.id || 'unknown-pack',
+        lemma,
+        surface,
+        readingKana,
+        readingRomaji: convertReadingToRomaji(readingKana),
+        lemmaKey: normalizeLookupKey(lemma),
+        surfaceKey: normalizeLookupKey(surface),
+        readingKey: normalizeLookupKey(readingKana),
+        pos: posRaw ? String(posRaw) : null,
+        meanings: glosses,
+        bestGloss: glosses[0] || null,
+        source: packMeta.source || packMeta.name || packMeta.id || 'local-pack',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    async function ensureEmbeddedFallbackDictionary() {
+      const existingMeta = await dbGet(STORES.dictionaryMeta, 'embeddedInstalled');
+      if (existingMeta?.installed) return;
+      const packMeta = {
+        id: EMBEDDED_FALLBACK_PACK.id,
+        name: EMBEDDED_FALLBACK_PACK.name,
+        version: EMBEDDED_FALLBACK_PACK.version,
+        source: EMBEDDED_FALLBACK_PACK.source,
+        installedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        entryCount: EMBEDDED_FALLBACK_PACK.entries.length
+      };
+      await dbPut(STORES.dictionaryPacks, packMeta);
+      for (const rawEntry of EMBEDDED_FALLBACK_PACK.entries) {
+        const entry = normalizeDictionaryEntry(rawEntry, packMeta);
+        await dbPut(STORES.dictionaryEntries, entry);
       }
-      return { byLemma, bySurface };
-    })();
+      await dbPut(STORES.dictionaryMeta, { id: 'embeddedInstalled', installed: true, installedAt: new Date().toISOString() });
+    }
 
-    function lookupByLemma(lemma, reading) {
+    async function loadDictionaryIndexes() {
+      const [packs, entries] = await Promise.all([
+        dbGetAll(STORES.dictionaryPacks),
+        dbGetAll(STORES.dictionaryEntries)
+      ]);
+      state.dictionaryStatus.loadedEntries = entries.length;
+      state.dictionaryStatus.packsCount = packs.length;
+      state.dictionaryStatus.lastImportedAt = packs.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0]?.updatedAt || null;
+    }
+
+    async function importDictionaryPack(file) {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const entries = Array.isArray(parsed) ? parsed : parsed.entries;
+      if (!Array.isArray(entries) || !entries.length) {
+        throw new Error('Dictionary pack inválido: falta array entries con contenido.');
+      }
+      const pack = parsed.pack || {};
+      const packMeta = {
+        id: String(pack.id || `pack-${Date.now()}`),
+        name: String(pack.name || file.name || 'Local dictionary pack'),
+        version: String(pack.version || 'unknown'),
+        source: String(pack.source || 'local-import'),
+        updatedAt: new Date().toISOString(),
+        installedAt: new Date().toISOString(),
+        entryCount: entries.length
+      };
+
+      await dbDeleteWhereIndexEquals(STORES.dictionaryEntries, 'packId', packMeta.id);
+      for (const rawEntry of entries) {
+        const normalized = normalizeDictionaryEntry(rawEntry, packMeta);
+        if (!normalized.lemmaKey && !normalized.surfaceKey && !normalized.readingKey) continue;
+        await dbPut(STORES.dictionaryEntries, normalized);
+      }
+      await dbPut(STORES.dictionaryPacks, packMeta);
+      await dbPut(STORES.dictionaryMeta, { id: 'lastImport', packId: packMeta.id, updatedAt: new Date().toISOString(), fileName: file.name });
+      await clearDictionaryCache();
+      await loadDictionaryIndexes();
+      return packMeta;
+    }
+
+    async function clearDictionaryCache() {
+      const db = await openDatabase();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORES.dictionaryCache, 'readwrite');
+        tx.objectStore(STORES.dictionaryCache).clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    function applyDeinflectionRules(surface) {
+      const s = normalizeTokenSurface(surface || '');
+      if (!s) return [];
+      const out = [{ form: s, reason: 'exact' }];
+      const rules = [
+        ['ました', 'る', 'polite-past'], ['ます', 'る', 'polite'], ['ない', 'る', 'negative'], ['なかった', 'る', 'negative-past'],
+        ['った', 'う', 'past-godan-u'], ['った', 'つ', 'past-godan-tsu'], ['った', 'る', 'past-godan-ru'],
+        ['いた', 'く', 'past-godan-ku'], ['いだ', 'ぐ', 'past-godan-gu'], ['んだ', 'む', 'past-godan-mu'],
+        ['んだ', 'ぶ', 'past-godan-bu'], ['んだ', 'ぬ', 'past-godan-nu'], ['した', 'す', 'past-godan-su'],
+        ['ている', 'る', 'teiru-ichidan'], ['てる', 'る', 'teiru-short'], ['した', 'する', 'suru-past'], ['して', 'する', 'suru-te']
+      ];
+      for (const [suffix, replacement, reason] of rules) {
+        if (s.endsWith(suffix) && s.length > suffix.length) {
+          out.push({ form: s.slice(0, -suffix.length) + replacement, reason });
+        }
+      }
+      return out;
+    }
+
+    async function lookupByLemma(lemma, reading) {
       const key = normalizeLookupKey(lemma);
-      const entries = OFFLINE_DICTIONARY_INDEX.byLemma.get(key) || [];
-      if (!entries.length) return [];
+      if (!key) return [];
+      const entries = await dbGetAllByIndex(STORES.dictionaryEntries, 'lemmaKey', key);
       if (!reading) return entries;
-      const hira = convertReadingToHiragana(reading);
-      return [...entries].sort((a, b) => Number(convertReadingToHiragana(b.readingKana || '') === hira) - Number(convertReadingToHiragana(a.readingKana || '') === hira));
+      const readingKey = normalizeLookupKey(convertReadingToHiragana(reading));
+      return entries.sort((a, b) => Number(b.readingKey === readingKey) - Number(a.readingKey === readingKey));
     }
 
-    function lookupBySurface(surface) {
+    async function lookupBySurface(surface) {
       const key = normalizeLookupKey(surface);
-      return OFFLINE_DICTIONARY_INDEX.bySurface.get(key) || [];
+      if (!key) return [];
+      return dbGetAllByIndex(STORES.dictionaryEntries, 'surfaceKey', key);
     }
 
-    function chooseBestDictionaryEntry(entries, token) {
-      if (!entries?.length) return null;
-      const lemma = normalizeLookupKey(token?.baseForm);
-      const surface = normalizeLookupKey(token?.surface);
-      return [...entries].sort((a, b) => {
-        const aLemma = normalizeLookupKey(a.lemma) === lemma ? 2 : 0;
-        const bLemma = normalizeLookupKey(b.lemma) === lemma ? 2 : 0;
-        const aSurface = normalizeLookupKey(a.surface) === surface ? 1 : 0;
-        const bSurface = normalizeLookupKey(b.surface) === surface ? 1 : 0;
-        return (bLemma + bSurface) - (aLemma + aSurface);
-      })[0];
+    async function lookupByReading(reading) {
+      const key = normalizeLookupKey(convertReadingToHiragana(reading));
+      if (!key) return [];
+      return dbGetAllByIndex(STORES.dictionaryEntries, 'readingKey', key);
+    }
+
+    function rankDictionaryCandidates(candidates, token, context = {}) {
+      const lemmaKey = normalizeLookupKey(token?.baseForm || context?.lemma);
+      const surfaceKey = normalizeLookupKey(token?.surface || context?.surface);
+      const readingKey = normalizeLookupKey(convertReadingToHiragana(token?.reading || context?.reading));
+      return [...candidates].map((entry) => {
+        let score = 0;
+        if (entry.lemmaKey && entry.lemmaKey === lemmaKey) score += 120;
+        if (entry.surfaceKey && entry.surfaceKey === surfaceKey) score += 80;
+        if (entry.readingKey && readingKey && entry.readingKey === readingKey) score += 60;
+        if (entry.meanings?.length) score += 10;
+        if (entry.bestGloss) score += 5;
+        return { entry, score };
+      }).sort((a, b) => b.score - a.score);
+    }
+
+    function chooseBestDictionaryEntry(rankedCandidates) {
+      if (!rankedCandidates?.length) return null;
+      return rankedCandidates[0].entry;
     }
 
     function buildDictionaryLookupRequest(token) {
+      const reading = convertReadingToHiragana(token?.reading || null);
+      const deinflections = applyDeinflectionRules(token?.surface || '');
       return {
         surface: token?.surface || '',
         lemma: token?.baseForm || '',
-        reading: token?.reading || null
+        reading,
+        deinflections
       };
     }
 
@@ -1065,34 +1266,50 @@
     }
 
     async function lookupDictionaryEntry(request, token, context = {}) {
-      const lookupKey = [normalizeLookupKey(request.lemma), normalizeLookupKey(request.surface), normalizeLookupKey(request.reading)].filter(Boolean).join('|');
+      const lookupKey = [
+        normalizeLookupKey(request.lemma),
+        normalizeLookupKey(request.surface),
+        normalizeLookupKey(request.reading),
+        ...request.deinflections.map((d) => normalizeLookupKey(d.form))
+      ].filter(Boolean).join('|');
+
       const cached = await readDictionaryCache(lookupKey);
       if (cached?.result) return cached.result;
 
-      let candidates = [];
-      if (request.lemma) candidates = lookupByLemma(request.lemma, request.reading);
-      if (!candidates.length && request.surface) candidates = lookupBySurface(request.surface);
+      const buckets = [];
+      if (request.lemma) buckets.push(...await lookupByLemma(request.lemma, request.reading));
+      if (request.surface) buckets.push(...await lookupBySurface(request.surface));
+      if (request.reading) buckets.push(...await lookupByReading(request.reading));
+      for (const deinflected of request.deinflections.slice(1, 8)) {
+        buckets.push(...await lookupByLemma(deinflected.form, request.reading));
+        buckets.push(...await lookupBySurface(deinflected.form));
+      }
 
-      const best = chooseBestDictionaryEntry(candidates, token);
+      const dedup = new Map();
+      for (const e of buckets) dedup.set(e.id, e);
+      const ranked = rankDictionaryCandidates([...dedup.values()], token, request);
+      const best = chooseBestDictionaryEntry(ranked);
+      const alternatives = ranked.slice(1, 4).map((x) => x.entry);
+
       const result = best ? {
         found: true,
         lookupKey,
-        source: best.source || 'embedded',
+        source: best.source || 'local-pack',
         queriedSurface: request.surface || null,
         lemma: best.lemma || request.lemma || null,
-        readingKana: convertReadingToHiragana(best.readingKana || request.reading || null),
-        readingRomaji: convertReadingToRomaji(best.readingKana || request.reading || null),
+        readingKana: best.readingKana || convertReadingToHiragana(request.reading || token?.reading || null),
+        readingRomaji: best.readingRomaji || convertReadingToRomaji(best.readingKana || request.reading || token?.reading || null),
         pos: best.pos || token?.pos || null,
         meanings: best.meanings || [],
-        bestGloss: (best.meanings || [])[0] || null,
-        alternatives: candidates.filter((entry) => entry !== best).slice(0, 3)
+        bestGloss: best.bestGloss || (best.meanings || [])[0] || null,
+        alternatives
       } : {
         found: false,
         lookupKey,
         queriedSurface: request.surface || null,
         lemma: request.lemma || null,
-        readingKana: convertReadingToHiragana(request.reading),
-        readingRomaji: convertReadingToRomaji(request.reading),
+        readingKana: convertReadingToHiragana(request.reading || token?.reading),
+        readingRomaji: convertReadingToRomaji(request.reading || token?.reading),
         pos: token?.pos || null,
         meanings: [],
         bestGloss: null,
@@ -1329,6 +1546,8 @@
             <h1 style="margin:0;font-size:1.3rem;">📚 JP EPUB Reader (Fase 4)</h1>
             <div class="spacer"></div>
             <button id="openVocabBtn">Vocabulario</button>
+            <button id="importDictPackBtn" title="Importar dictionary pack local">Importar diccionario</button>
+            <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
             <label><span class="hidden">Subir EPUB</span><input id="epubInput" type="file" accept=".epub,application/epub+zip" multiple /></label>
             <button id="toggleTheme" title="Cambiar tema">Tema: ${state.settings.theme === 'dark' ? 'Oscuro' : 'Claro'}</button>
           </div>
@@ -1350,6 +1569,8 @@
                 </div>
               </article>`;
           }).join('')}</div>` : `<div class="empty">No hay libros todavía. Sube uno o varios EPUB para comenzar.</div>`}
+          <p class="status" style="margin-top:10px;">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</p>
+          ${state.dictionaryStatus.importMessage ? `<p class="status">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
         </div>`;
 
       $('#epubInput').addEventListener('change', async (e) => {
@@ -1366,6 +1587,22 @@
       $('#openVocabBtn').addEventListener('click', renderVocabularyView);
 
       app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
+      $('#importDictPackBtn').addEventListener('click', () => $('#dictPackInput')?.click());
+      $('#dictPackInput').addEventListener('change', async (e) => {
+        const files = [...(e.target.files || [])];
+        if (!files.length) return;
+        for (const file of files) {
+          try {
+            const packMeta = await importDictionaryPack(file);
+            state.dictionaryStatus.importMessage = `Importado: ${packMeta.name} (${packMeta.entryCount} entradas).`;
+          } catch (err) {
+            console.error(err);
+            state.dictionaryStatus.importMessage = `Error importando ${file.name}: ${err?.message || err}`;
+          }
+        }
+        renderLibraryView();
+      });
+
       app.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
         if (!confirm('¿Seguro que quieres borrar este libro y su progreso?')) return;
         await deleteBook(btn.dataset.delete);
@@ -1514,6 +1751,8 @@
     // =========================
     (async function init() {
       await loadSettings();
+      await ensureEmbeddedFallbackDictionary();
+      await loadDictionaryIndexes();
       await refreshBooks();
       await loadVocabularyMap();
       await registerServiceWorker();
@@ -1523,10 +1762,9 @@
       }
     })();
 
-    // Nota Fase 4:
-    // Diccionario offline embebido (mini) + cache técnico en IndexedDB + definición personalizada de usuario.
-    // Limitaciones conocidas: cobertura lexical acotada y desambiguación heurística (sin analizador morfológico completo).
-    // Extensión futura: importar dictionary packs locales más grandes sin tocar la UI.
+    // Nota Fase 4 (corregida):
+    // Diccionario offline con packs locales importables en IndexedDB + fallback embebido.
+    // Lookup por lemma/surface/reading + deinflection básica extensible + cache técnico de resultados.
   </script>
 </body>
 </html>
