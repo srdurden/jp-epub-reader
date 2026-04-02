@@ -2406,7 +2406,15 @@
             || '';
           speakNativeTts(currentSentence, { lang: 'ja-JP' });
         });
-        $('#translateSentenceBtn')?.addEventListener('click', () => alert('Traducción rápida: función placeholder para conectar con tu flujo actual.'));
+        $('#translateSentenceBtn')?.addEventListener('click', () => {
+          const currentSentence = getTokenizedSentence(state.currentBookId, state.currentSpineIndex, state.currentSentenceIndex)?.sentence
+            || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
+            || '';
+          if (!currentSentence.trim()) return;
+          const prompt = `Traduce: “${currentSentence}”`;
+          const url = 'https://chatgpt.com/?q=' + encodeURIComponent(prompt);
+          window.open(url, '_blank', 'noopener,noreferrer');
+        });
         $('.sentence-box')?.addEventListener('click', async (e) => {
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
           if (!tokenEl) return;
