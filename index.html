@@ -31,7 +31,7 @@
       color: var(--text);
       font-size: 16px;
     }
-    .app { max-width: 760px; margin: 0 auto; padding: 20px 16px 32px; }
+    .app { max-width: 728px; margin: 0 auto; padding: 28px 22px 64px; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
     .spacer { flex: 1; }
@@ -210,56 +210,141 @@
       border: 2px solid color-mix(in srgb, var(--text) 70%, transparent);
       background: transparent;
     }
-    .library-shell { display: grid; gap: 18px; }
+    [data-theme="light"] body {
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0) 34%),
+        linear-gradient(180deg, #f2eefb 0%, #ece7f7 100%);
+      color: #27242d;
+    }
+    .library-shell {
+      display: grid;
+      gap: 24px;
+    }
+    .library-card,
+    .book-tile {
+      position: relative;
+      background: rgba(248, 246, 251, 0.92);
+      border: 1px solid rgba(208, 201, 221, 0.92);
+      box-shadow: 0 18px 36px rgba(124, 109, 160, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
     .library-card {
-      background: color-mix(in srgb, var(--surface) 96%, #f4f5fa 4%);
-      border: 1px solid color-mix(in srgb, var(--border) 78%, #fff 22%);
-      border-radius: 34px;
-      padding: 22px 20px;
-      box-shadow: 0 16px 34px rgba(66, 52, 105, 0.12);
+      border-radius: 38px;
+      padding: 24px 24px 20px;
     }
     .library-headline {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-      margin: 0;
+      display: block;
+      margin: 0 0 18px;
+    }
+    .library-title {
+      display: block;
+      font-size: clamp(2.65rem, 10vw, 4.25rem);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+      font-weight: 760;
     }
     .library-toolbar {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       flex-wrap: wrap;
       align-items: center;
-      margin-top: 12px;
+      margin-top: 0;
+    }
+    .library-action-btn {
+      min-height: 60px;
+      padding: 0 24px;
+      border-radius: 18px;
+      border: 1px solid rgba(186, 180, 199, 0.95);
+      background: linear-gradient(180deg, #fbfafd 0%, #f1eef7 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 2px rgba(88, 77, 123, 0.08);
+      font-size: clamp(1.02rem, 3vw, 1.22rem);
+      font-weight: 500;
+    }
+    .library-theme-row {
+      display: flex;
+      justify-content: flex-start;
+      margin-top: 14px;
+    }
+    .theme-segmented {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      padding: 4px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #e2dee9 0%, #dcd7e6 100%);
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.75);
+    }
+    .theme-segmented button {
+      min-width: 138px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: #625d6e;
+      padding: 13px 18px;
+      cursor: pointer;
+      font-size: clamp(1.06rem, 3.6vw, 1.28rem);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .theme-segmented button.active {
+      background: linear-gradient(180deg, #ffffff 0%, #f6f3fb 100%);
+      color: #24212b;
+      box-shadow: 0 8px 16px rgba(112, 97, 150, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    }
+    .theme-icon {
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
+    .theme-icon svg {
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .library-status {
+      margin: 18px 0 0;
+      font-size: clamp(1rem, 2.9vw, 1.1rem);
+      line-height: 1.38;
+      color: #6b6678;
     }
     .book-shelf {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 16px;
+      gap: 24px;
     }
     .book-tile {
-      border-radius: 32px;
-      background: color-mix(in srgb, var(--surface) 96%, #f4f5fa 4%);
-      border: 1px solid color-mix(in srgb, var(--border) 74%, #fff 26%);
-      padding: 12px 12px 16px;
+      border-radius: 36px;
+      padding: 18px 18px 30px;
       display: grid;
-      gap: 10px;
-      box-shadow: 0 12px 26px rgba(66, 52, 105, 0.1);
+      gap: 18px;
     }
     .book-cover-wrap {
       display: grid;
       place-items: center;
-      border-radius: 26px;
-      border: 1px solid var(--border);
-      min-height: 270px;
-      background: color-mix(in srgb, var(--surface) 90%, #dad5f8 10%);
+      border-radius: 28px;
+      border: 1px solid rgba(196, 188, 212, 0.98);
+      min-height: 300px;
+      background: linear-gradient(180deg, #e7dff5 0%, #d6cdea 100%);
       overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
     }
     .book-cover-wrap .cover {
       width: 100%;
-      height: min(52vw, 360px);
+      height: min(78vw, 430px);
       border-radius: 0;
       border: 0;
+      object-fit: cover;
     }
     .book-cover-button {
       width: 100%;
@@ -268,93 +353,154 @@
       background: transparent;
       cursor: pointer;
     }
-    .book-actions {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 4px;
-    }
     .book-header {
       display: grid;
-      gap: 4px;
-      padding: 4px 4px 0;
+      gap: 6px;
+      padding: 0 4px;
     }
     .book-title {
       margin: 0;
-      font-size: clamp(1.5rem, 3.8vw, 2rem);
-      line-height: 1.14;
-      letter-spacing: -0.01em;
+      font-size: clamp(1.95rem, 5.8vw, 2.75rem);
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+    }
+    .book-meta {
+      margin: 0;
+      color: #76707f;
+      font-size: clamp(1.02rem, 3vw, 1.16rem);
+      line-height: 1.3;
     }
     .book-progress-shell {
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      padding: 14px 14px 10px;
-      margin-top: 8px;
-      background: color-mix(in srgb, var(--surface) 96%, #f0f1f7 4%);
+      position: relative;
+      border: 1px solid rgba(206, 198, 219, 0.95);
+      border-radius: 28px;
+      padding: 18px 18px 68px;
+      margin-top: 12px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(243, 240, 248, 0.82) 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
     }
     .book-progress-head {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 8px;
-      font-size: clamp(1.03rem, 2.8vw, 1.14rem);
-      margin-bottom: 8px;
+      gap: 12px;
+      font-size: clamp(1.06rem, 3.2vw, 1.25rem);
+      margin-bottom: 10px;
+      color: #25232d;
+      font-weight: 500;
+    }
+    .book-progress-left {
+      flex: 1 1 auto;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .book-progress-right {
+      flex: 0 0 auto;
+      color: #3a3643;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
     .book-progress-shell input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
       width: 100%;
+      height: 30px;
       padding: 0;
-      accent-color: color-mix(in srgb, var(--primary) 40%, #8b82bf 60%);
+      border: 0;
+      background: transparent;
+      margin: 0;
+    }
+    .book-progress-shell input[type="range"]:disabled {
+      opacity: 1;
+      cursor: default;
+    }
+    .book-progress-shell input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 999px;
+      background: #c7c1d8;
+    }
+    .book-progress-shell input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      margin-top: -10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 1px solid #c6bfd3;
+      background: linear-gradient(180deg, #ffffff 0%, #ece9f5 100%);
+      box-shadow: 0 4px 10px rgba(113, 98, 150, 0.15);
+    }
+    .book-progress-shell input[type="range"]::-moz-range-track {
+      height: 6px;
+      border-radius: 999px;
+      background: #c7c1d8;
+    }
+    .book-progress-shell input[type="range"]::-moz-range-thumb {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 1px solid #c6bfd3;
+      background: linear-gradient(180deg, #ffffff 0%, #ece9f5 100%);
+      box-shadow: 0 4px 10px rgba(113, 98, 150, 0.15);
     }
     .book-footer {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      margin-top: 8px;
+      position: relative;
+      min-height: 44px;
+      margin-top: 0;
     }
     .book-play-main {
-      width: 84px;
-      height: 84px;
+      position: absolute;
+      left: 50%;
+      bottom: -50px;
+      transform: translateX(-50%);
+      width: 102px;
+      height: 102px;
+      padding: 0;
       border-radius: 999px;
-      border: 2px solid color-mix(in srgb, var(--text) 60%, #999 40%);
-      background: color-mix(in srgb, var(--surface) 94%, #e9e8f7 6%);
-      font-size: 2rem;
-      line-height: 1;
+      border: 2.2px solid rgba(79, 73, 94, 0.82);
+      background: linear-gradient(180deg, #fbfafd 0%, #ece7f6 100%);
+      display: grid;
+      place-items: center;
       cursor: pointer;
-      justify-self: center;
+      box-shadow: 0 10px 24px rgba(109, 95, 147, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+      z-index: 2;
+      justify-self: unset;
+    }
+    .book-play-main svg {
+      width: 34px;
+      height: 34px;
+      fill: currentColor;
+      transform: translateX(2px);
     }
     .book-delete-btn {
-      width: 52px;
-      height: 52px;
+      position: absolute;
+      right: -4px;
+      bottom: -18px;
+      width: 58px;
+      height: 58px;
+      padding: 0;
       border-radius: 999px;
       display: grid;
       place-items: center;
-      font-size: 1.5rem;
-      color: var(--text);
-      background: color-mix(in srgb, var(--surface) 92%, #eceff6 8%);
-      border: 1px solid var(--border);
-      justify-self: end;
+      font-size: 0;
+      color: #2b2831;
+      background: rgba(236, 232, 244, 0.92);
+      border: 1px solid rgba(210, 204, 223, 0.95);
+      box-shadow: 0 6px 16px rgba(111, 99, 149, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
-    .segmented-toggle {
-      display: inline-grid;
-      grid-template-columns: 1fr 1fr;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 2px;
-      background: color-mix(in srgb, var(--surface) 95%, #eef2f8 5%);
-      gap: 2px;
-    }
-    .segmented-toggle button {
-      border: 0;
-      border-radius: 999px;
-      background: transparent;
-      color: var(--muted);
-      padding: 6px 10px;
-      cursor: pointer;
-      min-width: 70px;
-    }
-    .segmented-toggle button.active {
-      background: #fff;
-      color: var(--text);
-      box-shadow: 0 4px 12px rgba(71, 64, 105, 0.12);
+    .book-delete-btn svg {
+      width: 25px;
+      height: 25px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .upload-book-tile {
       cursor: pointer;
@@ -362,23 +508,50 @@
     .upload-book-tile .book-cover-wrap {
       border-style: dashed;
       transition: border-color 120ms ease, background-color 120ms ease;
-      background: color-mix(in srgb, var(--surface) 88%, #eef2ff 12%);
+      background: linear-gradient(180deg, #f7f5fb 0%, #ece8f6 100%);
     }
     .upload-book-tile .upload-plus {
-      width: 88px;
-      height: 88px;
+      width: 96px;
+      height: 96px;
+      padding: 0;
       border-radius: 999px;
       display: grid;
       place-items: center;
-      font-size: 2.6rem;
       line-height: 1;
-      border: 1px solid var(--border);
-      background: color-mix(in srgb, var(--surface) 92%, #dbeafe 8%);
+      border: 1px solid rgba(190, 184, 205, 0.95);
+      background: linear-gradient(180deg, #ffffff 0%, #f2eef8 100%);
+      box-shadow: 0 8px 18px rgba(110, 98, 147, 0.12);
       color: var(--text);
+    }
+    .upload-book-tile .upload-plus svg {
+      width: 36px;
+      height: 36px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .upload-book-tile.dragover .book-cover-wrap {
       border-color: var(--primary);
-      background: color-mix(in srgb, var(--surface) 80%, #bfdbfe 20%);
+      background: linear-gradient(180deg, #eef3ff 0%, #dbe7ff 100%);
+    }
+    @media (max-width: 520px) {
+      .app {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+      .library-card {
+        padding: 22px 18px 18px;
+      }
+      .book-tile {
+        padding: 16px 16px 28px;
+      }
+      .theme-segmented button {
+        min-width: 0;
+        width: 100%;
+        padding-inline: 14px;
+      }
     }
   </style>
 </head>
@@ -467,6 +640,14 @@
       }
     };
 
+    const ICONS = {
+      sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.72 5.28l-1.56 1.56M6.84 17.16l-1.56 1.56M18.72 18.72l-1.56-1.56M6.84 6.84 5.28 5.28"></path></svg>',
+      moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 14.2A8.7 8.7 0 1 1 9.8 3.8a7.1 7.1 0 0 0 10.4 10.4Z"></path></svg>',
+      play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.4v11.2c0 .5.54.81.98.56l8.85-5.6a.64.64 0 0 0 0-1.08l-8.85-5.6A.64.64 0 0 0 8 6.4Z"></path></svg>',
+      trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.5h15"></path><path d="M9.5 10.5v6.5"></path><path d="M14.5 10.5v6.5"></path><path d="M7.5 7.5 8.2 19a2 2 0 0 0 2 1.9h3.6a2 2 0 0 0 2-1.9l.7-11.5"></path><path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7"></path></svg>',
+      plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>'
+    };
+
     // =========================
     // Utilidades generales
     // =========================
@@ -479,6 +660,23 @@
     function formatDate(iso) {
       if (!iso) return '—';
       try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    }
+
+    function formatDateTimeShort(iso) {
+      if (!iso) return '—';
+      try {
+        return new Intl.DateTimeFormat('es-ES', {
+          day: 'numeric',
+          month: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }).format(new Date(iso));
+      } catch {
+        return formatDate(iso);
+      }
     }
 
     function uuid() {
@@ -1641,13 +1839,27 @@
 
     async function persistCurrentProgress() {
       if (!state.currentBookId) return;
-      const percent = ((state.currentSpineIndex + 1) / Math.max(state.sections.length, 1)) * 100;
+      const chapterCurrent = Math.min(state.currentSpineIndex + 1, Math.max(state.sections.length, 1));
+      const chapterTotal = Math.max(state.sections.length, 1);
+      const sectionSentences = getSentencesForSection(state.sections[state.currentSpineIndex] || {});
+      const sentenceTotal = Math.max(sectionSentences.length, 1);
+      const sentenceCurrent = Math.min(Math.max(state.currentSentenceIndex + 1, 1), sentenceTotal);
+      const chapterPercent = (chapterCurrent / chapterTotal) * 100;
+      const displayPercent = state.readingMode === 'sentence'
+        ? (sentenceCurrent / sentenceTotal) * 100
+        : chapterPercent;
+
       await saveReadingProgress(state.currentBookId, {
         readingMode: state.readingMode,
         currentLocation: state.sections[state.currentSpineIndex]?.path || null,
         currentSectionIndex: state.currentSpineIndex,
         currentSentenceIndex: state.currentSentenceIndex,
-        percent: Number(percent.toFixed(2))
+        percent: Number(chapterPercent.toFixed(2)),
+        displayPercent: Number(displayPercent.toFixed(2)),
+        chapterCurrent,
+        chapterTotal,
+        sentenceCurrent,
+        sentenceTotal
       });
     }
 
@@ -1793,6 +2005,28 @@
       return dbGet(STORES.progress, bookId);
     }
 
+    function formatProgressPercent(value) {
+      const safe = Number.isFinite(Number(value)) ? Number(value) : 0;
+      return `${safe.toFixed(2)}%`;
+    }
+
+    function getLibraryProgressSnapshot(progress) {
+      const chapterCurrent = Math.max(1, Number(progress?.chapterCurrent || ((progress?.currentSectionIndex ?? 0) + 1)) || 1);
+      const chapterTotal = Math.max(1, Number(progress?.chapterTotal || chapterCurrent) || 1);
+      const hasSentenceData = progress?.sentenceTotal != null || progress?.readingMode === 'sentence';
+      const sentenceCurrent = Math.max(1, Number(progress?.sentenceCurrent || ((progress?.currentSentenceIndex ?? 0) + 1)) || 1);
+      const sentenceTotal = Math.max(1, Number(progress?.sentenceTotal || sentenceCurrent) || 1);
+      const rawPercent = Math.max(0, Math.min(100, Number(progress?.displayPercent ?? progress?.percent ?? 0) || 0));
+      const positionText = hasSentenceData
+        ? `${chapterCurrent}/${chapterTotal} | ${sentenceCurrent}/${sentenceTotal}`
+        : `${chapterCurrent}/${chapterTotal}`;
+      return {
+        rawPercent,
+        percentLabel: formatProgressPercent(rawPercent),
+        positionText
+      };
+    }
+
     async function renderLibraryView() {
       state.route = 'library';
       const app = $('#app');
@@ -1803,25 +2037,27 @@
         <div class="library-shell">
           <div class="library-card">
             <h1 class="library-headline">
-              <span style="font-size:clamp(2.2rem,7vw,3.3rem);line-height:1;margin:0;">JP Reader</span>
+              <span class="library-title">JP Reader</span>
             </h1>
             <div class="library-toolbar">
-              <button id="openVocabBtn">Vocabulario</button>
-              <button id="importDictPackBtn" title="Importar dictionary pack local">Importar diccionario</button>
+              <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
+              <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
               <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
               <input id="epubInput" class="hidden" type="file" accept=".epub,application/epub+zip" multiple />
-              <div class="spacer"></div>
-              <div id="libraryThemeToggle" class="segmented-toggle" role="group" aria-label="Tema">
-                <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}">☀️ Claro</button>
-                <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}">🌙 Oscuro</button>
+            </div>
+            <div class="library-theme-row">
+              <div id="libraryThemeToggle" class="segmented-toggle theme-segmented" role="group" aria-label="Tema">
+                <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}"><span class="theme-icon">${ICONS.sun}</span><span>Claro</span></button>
+                <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}"><span class="theme-icon">${ICONS.moon}</span><span>Oscuro</span></button>
               </div>
             </div>
-            <p class="status" style="margin:10px 0 0;">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</p>
-            ${state.dictionaryStatus.importMessage ? `<p class="status">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
+            <p class="library-status">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDateTimeShort(state.dictionaryStatus.lastImportedAt)}.</p>
+            ${state.dictionaryStatus.importMessage ? `<p class="library-status">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
           </div>
           <div class="book-shelf">
             ${state.books.length ? state.books.map((b) => {
             const pg = progressMap.get(b.id);
+            const snapshot = getLibraryProgressSnapshot(pg);
             return `
               <article class="book-tile">
                 <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
@@ -1829,17 +2065,16 @@
                 </button>
                 <div class="book-header">
                   <h2 class="book-title">${escapeHtml(b.title || b.fileName)}</h2>
-                  <p class="meta">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
+                  <p class="book-meta">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
                   <div class="book-progress-shell">
                     <div class="book-progress-head">
-                      <span>Progreso aprox.: ${pg?.percent != null ? `${pg.percent}%` : '0%'}</span>
-                      <span>Cap. ${pg?.currentSectionIndex != null ? pg.currentSectionIndex + 1 : 1} · ${pg?.readingMode === 'sentence' ? 'frase' : 'página'}</span>
+                      <span class="book-progress-left">Progreso aprox.: ${snapshot.percentLabel}</span>
+                      <span class="book-progress-right">${snapshot.positionText}</span>
                     </div>
-                    <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
+                    <input type="range" min="0" max="100" value="${snapshot.rawPercent}" disabled />
                     <div class="book-footer">
-                      <span></span>
-                      <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura">▶</button>
-                      <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro">🗑</button>
+                      <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura">${ICONS.play}</button>
+                      <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro">${ICONS.trash}</button>
                     </div>
                   </div>
                 </div>
@@ -1847,11 +2082,11 @@
           }).join('') : ''}
             <article id="uploadBookTile" class="book-tile upload-book-tile" role="button" tabindex="0" aria-label="Subir EPUB">
               <div class="book-cover-wrap">
-                <button id="uploadBookBtn" class="upload-plus" type="button" aria-label="Subir EPUB">+</button>
+                <button id="uploadBookBtn" class="upload-plus" type="button" aria-label="Subir EPUB">${ICONS.plus}</button>
               </div>
-              <div>
+              <div class="book-header">
                 <h2 class="book-title">Subir epub</h2>
-                <p class="meta">Haz clic en + o arrastra un .epub aquí.</p>
+                <p class="book-meta">Haz clic en + o arrastra un .epub aquí.</p>
               </div>
             </article>
           </div>
@@ -1915,8 +2150,11 @@
         renderLibraryView();
       });
 
-      app.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
-        if (!confirm('¿Seguro que quieres borrar este libro y su progreso?')) return;
+      app.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const book = state.books.find((b) => b.id === btn.dataset.delete);
+        const label = book?.title || book?.fileName || 'este libro';
+        if (!confirm(`¿Borrar ${label}? Esta acción elimina el EPUB y el progreso guardado.`)) return;
         await deleteBook(btn.dataset.delete);
         await refreshBooks();
         renderLibraryView();
