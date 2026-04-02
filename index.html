@@ -223,8 +223,12 @@
       margin: 0 auto 8px;
     }
     .token-grid { display: grid; gap: 6px; }
-    .token-grid .v { font-weight: 500; word-break: break-word; }
+    .token-grid .v { font-weight: 400; word-break: break-word; }
     .token-grid .hiragana { color: var(--muted); font-size: 0.95rem; }
+    .token-panel h3 .hiragana {
+      color: var(--muted);
+      font-weight: 400;
+    }
     .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
     .token-panel-footer {
       margin-top: 12px;
@@ -241,9 +245,21 @@
       gap: 4px;
       flex-shrink: 0;
     }
+    .custom-definition-actions .icon-btn {
+      border: 1px solid var(--border);
+      background: var(--surface-soft);
+      border-radius: 10px;
+      padding: 6px 8px;
+      font-size: 0.95rem;
+    }
     .chatgpt-btn {
-      margin-top: 8px;
       width: fit-content;
+    }
+    .external-links-row {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
     .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
     .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
@@ -1502,7 +1518,6 @@
                 <span>${escapeHtml(entry.userDefinition)}</span>
               </div>
             ` : ''}
-            <button id="askChatgptBtn" class="chatgpt-btn">chatgpt</button>
           </div>
           <div style="margin-top:8px; ${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
             <label for="userDefinitionInput"><strong>Definición personalizada</strong></label>
@@ -1510,6 +1525,10 @@
               <textarea id="userDefinitionInput" placeholder="Escribe tu definición o nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
               <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
             </div>
+          </div>
+          <div class="external-links-row">
+            <button id="askChatgptBtn" class="chatgpt-btn">chatgpt</button>
+            <button id="openGoogleTranslateBtn" class="chatgpt-btn">Google Translate</button>
           </div>
           <footer class="token-panel-footer">
             <div class="level-picker" aria-label="Nivel de conocimiento">
@@ -1569,6 +1588,12 @@
         if (!promptWord.trim()) return;
         const prompt = `Dame la lectura en hiragana y la traducción de "${promptWord}"`;
         const url = 'https://chatgpt.com/?q=' + encodeURIComponent(prompt);
+        window.open(url, '_blank', 'noopener,noreferrer');
+      });
+      $('#openGoogleTranslateBtn')?.addEventListener('click', () => {
+        const promptWord = entry.surface || token.surface || token.baseForm || '';
+        if (!promptWord.trim()) return;
+        const url = 'https://translate.google.com/?sl=ja&tl=es&op=translate&text=' + encodeURIComponent(promptWord);
         window.open(url, '_blank', 'noopener,noreferrer');
       });
       $('#removeVocabEntryBtn')?.addEventListener('click', async () => {
