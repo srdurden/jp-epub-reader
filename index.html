@@ -339,10 +339,10 @@
       position: relative;
       border: 1px solid var(--border);
       border-radius: 24px;
-      padding: 16px 18px 70px;
+      padding: 16px 18px 56px;
       margin-top: 2px;
       background: color-mix(in srgb, var(--surface-strong) 78%, var(--surface-soft) 22%);
-      min-height: 140px;
+      min-height: 126px;
     }
     .book-progress-head {
       display: flex;
@@ -366,33 +366,56 @@
     .book-play-main {
       position: absolute;
       left: 50%;
-      bottom: -18px;
+      bottom: -14px;
       transform: translateX(-50%);
-      width: 86px;
-      height: 86px;
+      width: 56px;
+      height: 56px;
+      padding: 0;
       border-radius: 999px;
       border: 2px solid color-mix(in srgb, var(--text) 48%, transparent);
+      color: color-mix(in srgb, var(--text) 96%, transparent);
       background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
-      font-size: 2rem;
-      line-height: 1;
       cursor: pointer;
-      box-shadow: 0 8px 18px rgba(92, 83, 122, 0.1);
+      box-shadow: 0 6px 14px rgba(92, 83, 122, 0.1);
+      display: grid;
+      place-items: center;
     }
     .book-delete-btn {
       position: absolute;
       right: 14px;
-      bottom: 14px;
-      width: 54px;
-      height: 54px;
+      bottom: 12px;
+      width: 40px;
+      height: 40px;
       padding: 0;
       border-radius: 999px;
       display: grid;
       place-items: center;
-      font-size: 1.4rem;
-      color: var(--text);
+      color: color-mix(in srgb, var(--text) 88%, transparent);
       background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
       border: 1px solid var(--border);
-      box-shadow: 0 4px 14px rgba(92, 83, 122, 0.08);
+      box-shadow: 0 3px 10px rgba(92, 83, 122, 0.08);
+    }
+    .book-control-icon {
+      display: block;
+      width: 18px;
+      height: 18px;
+      flex: none;
+    }
+    .book-play-main .book-control-icon {
+      width: 16px;
+      height: 16px;
+      margin-left: 2px;
+      fill: currentColor;
+      stroke: none;
+    }
+    .book-delete-btn .book-control-icon {
+      width: 17px;
+      height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .segmented-toggle {
       display: inline-grid;
@@ -481,7 +504,17 @@
       .segmented-toggle { min-width: 0; width: 100%; }
       .segmented-toggle button { padding-inline: 12px; }
       .book-tile { padding: 14px 14px 28px; }
-      .book-progress-shell { padding-inline: 16px; }
+      .book-progress-shell { padding: 15px 16px 52px; }
+      .book-play-main {
+        width: 54px;
+        height: 54px;
+      }
+      .book-delete-btn {
+        width: 38px;
+        height: 38px;
+        right: 12px;
+        bottom: 11px;
+      }
     }
   </style>
 </head>
@@ -1952,8 +1985,8 @@
                     <span>${rightLabel}</span>
                   </div>
                   <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
-                  <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura">▶</button>
-                  <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro">🗑</button>
+                  <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5v11l9-5.5z"></path></svg></button>
+                  <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.5h15"></path><path d="M9.5 3.75h5"></path><path d="M8 7.5v10.25a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7.5"></path><path d="M10.25 10.5v4.75"></path><path d="M13.75 10.5v4.75"></path></svg></button>
                 </div>
               </article>`;
           }).join('') : ''}
