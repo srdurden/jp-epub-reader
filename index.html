@@ -1306,10 +1306,12 @@
       return sentences.map((_, sentenceIndex) => getTokenizedSentence(bookId, sectionIndex, sentenceIndex));
     }
 
-    function renderTokenizedPageSection(bookId, sectionIndex) {
+    function renderTokenizedPageSection(bookId, sectionIndex, startSentenceIndex = 0) {
       const tokenizedSentences = getTokenizedSection(bookId, sectionIndex);
       if (!tokenizedSentences.length) return '<p class="status">Sin texto legible en esta sección.</p>';
-      return `<div class="page-mode-text">${tokenizedSentences.map((payload) => `<p class="page-sentence">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`).join('')}</div>`;
+      const safeStart = Math.max(0, Math.min(Number(startSentenceIndex) || 0, tokenizedSentences.length - 1));
+      const visibleSentences = tokenizedSentences.slice(safeStart);
+      return `<div class="page-mode-text">${visibleSentences.map((payload) => `<p class="page-sentence">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`).join('')}</div>`;
     }
 
 
@@ -1976,7 +1978,9 @@
 
     async function setReadingMode(mode) {
       state.readingMode = mode;
-      if (mode === 'sentence') state.currentSentenceIndex = 0;
+      const sectionSentences = getSentencesForSection(state.sections[state.currentSpineIndex] || {});
+      const sentenceCap = Math.max(sectionSentences.length - 1, 0);
+      state.currentSentenceIndex = Math.max(0, Math.min(state.currentSentenceIndex, sentenceCap));
       closeTokenPanel();
       await persistCurrentProgress();
       renderReaderView();
@@ -1985,7 +1989,10 @@
     async function nextStep() {
       closeTokenPanel();
       if (state.readingMode === 'page') {
-        if (state.currentSpineIndex < state.sections.length - 1) state.currentSpineIndex++;
+        if (state.currentSpineIndex < state.sections.length - 1) {
+          state.currentSpineIndex++;
+          state.currentSentenceIndex = 0;
+        }
       } else {
         const sents = getSentencesForSection(state.sections[state.currentSpineIndex]);
         if (state.currentSentenceIndex < sents.length - 1) state.currentSentenceIndex++;
@@ -2001,7 +2008,10 @@
     async function prevStep() {
       closeTokenPanel();
       if (state.readingMode === 'page') {
-        if (state.currentSpineIndex > 0) state.currentSpineIndex--;
+        if (state.currentSpineIndex > 0) {
+          state.currentSpineIndex--;
+          state.currentSentenceIndex = 0;
+        }
       } else {
         if (state.currentSentenceIndex > 0) state.currentSentenceIndex--;
         else if (state.currentSpineIndex > 0) {
@@ -2315,7 +2325,7 @@
     function renderPageMode(section, sectionIndex) {
       return `
         <div id="tokenPanelHost"></div>
-        ${renderTokenizedPageSection(state.currentBookId, sectionIndex)}
+        ${renderTokenizedPageSection(state.currentBookId, sectionIndex, state.currentSentenceIndex)}
       `;
     }
 
