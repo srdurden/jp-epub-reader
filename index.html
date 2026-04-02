@@ -805,6 +805,7 @@
       sentenceTokenCache: new Map(),
       settings: { ...DEFAULT_SETTINGS },
       vocabMap: new Map(),
+      vocabDataVersion: 0,
       tokenSelection: {
         token: null,
         entry: null,
@@ -816,6 +817,18 @@
       vocabFilters: {
         query: '',
         level: 'all'
+      },
+      vocabView: {
+        initialized: false,
+        cacheKey: '',
+        filteredEntries: [],
+        allEntriesCount: 0,
+        renderedCount: 0,
+        batchSize: 80,
+        debounceTimer: null,
+        pendingNotes: new Map(),
+        loadMoreObserver: null,
+        isLoadingMore: false
       },
       vocabSelection: null,
       dictionaryStatus: {
@@ -830,6 +843,11 @@
     // Utilidades generales
     // =========================
     const $ = (sel, root = document) => root.querySelector(sel);
+
+    function touchVocabularyData() {
+      state.vocabDataVersion += 1;
+      state.vocabView.cacheKey = '';
+    }
 
     function escapeHtml(str = '') {
       return str.replace(/[&<>"]/g, (m) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
@@ -1446,6 +1464,7 @@
     async function loadVocabularyMap() {
       const entries = await dbGetAll(STORES.vocabEntries);
       state.vocabMap = new Map(entries.map((entry) => [entry.vocabKey, entry]));
+      touchVocabularyData();
       return state.vocabMap;
     }
 
@@ -1453,7 +1472,10 @@
       if (!key) return null;
       if (state.vocabMap.has(key)) return state.vocabMap.get(key);
       const entry = await dbGetByIndex(STORES.vocabEntries, 'vocabKey', key);
-      if (entry) state.vocabMap.set(key, entry);
+      if (entry) {
+        state.vocabMap.set(key, entry);
+        touchVocabularyData();
+      }
       return entry;
     }
 
@@ -1489,6 +1511,7 @@
       };
       await dbPut(STORES.vocabEntries, entry);
       state.vocabMap.set(entry.vocabKey, entry);
+      touchVocabularyData();
       return entry;
     }
 
@@ -1502,6 +1525,7 @@
       };
       await dbPut(STORES.vocabEntries, next);
       state.vocabMap.set(next.vocabKey, next);
+      touchVocabularyData();
       return next;
     }
 
@@ -1641,6 +1665,7 @@
         if (!existing?.id) return;
         await dbDelete(STORES.vocabEntries, existing.id);
         state.vocabMap.delete(entry.vocabKey);
+        touchVocabularyData();
         applyFamiliarityStyles(entry.vocabKey, null);
         closeTokenPanel();
       });
@@ -1675,6 +1700,7 @@
       const enriched = enrichVocabEntryWithDictionaryData(entry, dictionaryResult, resolvedToken);
       await dbPut(STORES.vocabEntries, enriched);
       state.vocabMap.set(enriched.vocabKey, enriched);
+      touchVocabularyData();
       entry = enriched;
       state.tokenSelection = {
         token: resolvedToken,
@@ -2149,6 +2175,7 @@
       const next = { ...existing, userDefinition: (text || '').trim() || null, updatedAt: new Date().toISOString() };
       await dbPut(STORES.vocabEntries, next);
       state.vocabMap.set(next.vocabKey, next);
+      touchVocabularyData();
       return next;
     }
 
@@ -2263,82 +2290,229 @@
       });
     }
 
+    function getVocabularyCacheKey() {
+      const query = (state.vocabFilters.query || '').trim().toLowerCase();
+      const level = String(state.vocabFilters.level || 'all');
+      return `${state.vocabDataVersion}|${query}|${level}`;
+    }
+
+    function getFilteredVocabularyEntries() {
+      const cacheKey = getVocabularyCacheKey();
+      if (state.vocabView.cacheKey === cacheKey) {
+        return {
+          allEntriesCount: state.vocabView.allEntriesCount,
+          entries: state.vocabView.filteredEntries
+        };
+      }
+      const allEntries = [...state.vocabMap.values()].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      const entries = filterVocabularyEntries(allEntries, state.vocabFilters.query, state.vocabFilters.level);
+      state.vocabView.cacheKey = cacheKey;
+      state.vocabView.allEntriesCount = allEntries.length;
+      state.vocabView.filteredEntries = entries;
+      return { allEntriesCount: allEntries.length, entries };
+    }
+
+    function snapshotVocabularyDraftNotes(root = $('#app')) {
+      const list = root?.querySelector('#vocabList');
+      if (!list) return;
+      list.querySelectorAll('textarea[data-vocab-definition][data-vocab-key]').forEach((textarea) => {
+        state.vocabView.pendingNotes.set(textarea.dataset.vocabKey, textarea.value || '');
+      });
+    }
+
+    function renderVocabularyEntriesChunk(entries) {
+      return entries.map((entry) => {
+        const draftNote = state.vocabView.pendingNotes.has(entry.vocabKey)
+          ? state.vocabView.pendingNotes.get(entry.vocabKey)
+          : (entry.userDefinition || '');
+        return `
+          <article class="vocab-item" style="border-radius:24px;padding:16px 16px 14px;box-shadow:var(--shadow-soft);">
+            <div class="vocab-main">
+              <strong style="font-size:1.2rem;">${escapeHtml(entry.surface || entry.lemma || entry.vocabKey)}</strong>
+              ${entry.readingKana ? `<span class="badge">${escapeHtml(entry.readingKana)}</span>` : ''}
+              <span class="badge level">Nivel ${escapeHtml(String(entry.familiarityLevel ?? '—'))}</span>
+            </div>
+            ${entry.defaultDefinition ? `<p class="meta" style="margin:10px 0 0;">${escapeHtml(entry.defaultDefinition)}</p>` : ''}
+            <textarea data-vocab-definition data-vocab-key="${escapeHtml(entry.vocabKey)}" placeholder="Tu definición / nota">${escapeHtml(draftNote)}</textarea>
+            <div class="level-picker">
+              <button type="button" class="level-btn" data-vocab-level="1" data-vocab-key="${escapeHtml(entry.vocabKey)}">1</button>
+              <button type="button" class="level-btn" data-vocab-level="2" data-vocab-key="${escapeHtml(entry.vocabKey)}">2</button>
+              <button type="button" class="level-btn" data-vocab-level="3" data-vocab-key="${escapeHtml(entry.vocabKey)}">3</button>
+              <button type="button" class="level-btn" data-vocab-level="4" data-vocab-key="${escapeHtml(entry.vocabKey)}">4</button>
+              <button type="button" class="level-btn" data-vocab-level="5" data-vocab-key="${escapeHtml(entry.vocabKey)}">5</button>
+              <button type="button" class="level-btn" data-vocab-key="${escapeHtml(entry.vocabKey)}">Quitar</button>
+              <button type="button" class="library-action-btn" data-save-vocab-definition data-vocab-key="${escapeHtml(entry.vocabKey)}" style="min-height:42px;padding:8px 14px;border-radius:999px;">Guardar nota</button>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function updateVocabularyCounters() {
+      const { allEntriesCount, entries } = getFilteredVocabularyEntries();
+      const statusEl = $('#vocabStatus');
+      if (statusEl) {
+        statusEl.textContent = `${allEntriesCount} guardadas · ${entries.length} filtradas · ${state.vocabView.renderedCount} renderizadas.`;
+      }
+    }
+
+    function updateVocabularyLoadState() {
+      const loadState = $('#vocabLoadState');
+      if (!loadState) return;
+      const pending = state.vocabView.filteredEntries.length - state.vocabView.renderedCount;
+      if (state.vocabView.isLoadingMore && pending > 0) {
+        loadState.textContent = 'Cargando más entradas…';
+        loadState.style.display = 'block';
+      } else if (pending > 0) {
+        loadState.textContent = `Desliza para cargar más (${pending} pendientes).`;
+        loadState.style.display = 'block';
+      } else {
+        loadState.textContent = '';
+        loadState.style.display = 'none';
+      }
+    }
+
+    function appendVocabularyChunk() {
+      const list = $('#vocabList');
+      if (!list) return;
+      const entries = state.vocabView.filteredEntries;
+      if (!entries.length) {
+        list.innerHTML = `<div class="library-card"><p class="empty">No hay palabras guardadas todavía.</p></div>`;
+        state.vocabView.renderedCount = 0;
+        updateVocabularyCounters();
+        updateVocabularyLoadState();
+        return;
+      }
+      if (state.vocabView.renderedCount >= entries.length) {
+        updateVocabularyLoadState();
+        return;
+      }
+      state.vocabView.isLoadingMore = true;
+      updateVocabularyLoadState();
+      const nextCount = Math.min(entries.length, state.vocabView.renderedCount + state.vocabView.batchSize);
+      const chunk = entries.slice(state.vocabView.renderedCount, nextCount);
+      list.insertAdjacentHTML('beforeend', renderVocabularyEntriesChunk(chunk));
+      state.vocabView.renderedCount = nextCount;
+      state.vocabView.isLoadingMore = false;
+      updateVocabularyCounters();
+      updateVocabularyLoadState();
+    }
+
+    function resetVocabularyListRender() {
+      snapshotVocabularyDraftNotes();
+      const list = $('#vocabList');
+      if (!list) return;
+      list.innerHTML = '';
+      state.vocabView.renderedCount = 0;
+      appendVocabularyChunk();
+    }
+
+    function setupVocabularyLoadMoreObserver() {
+      const sentinel = $('#vocabLoadMoreSentinel');
+      if (!sentinel) return;
+      state.vocabView.loadMoreObserver?.disconnect();
+      state.vocabView.loadMoreObserver = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        appendVocabularyChunk();
+      }, { root: null, rootMargin: '300px 0px', threshold: 0.01 });
+      state.vocabView.loadMoreObserver.observe(sentinel);
+    }
+
+    function scheduleVocabularyListRefresh(delay = 180) {
+      window.clearTimeout(state.vocabView.debounceTimer);
+      state.vocabView.debounceTimer = window.setTimeout(() => {
+        getFilteredVocabularyEntries();
+        resetVocabularyListRender();
+      }, delay);
+    }
+
+    function attachVocabularyEventDelegation(app) {
+      const list = app.querySelector('#vocabList');
+      if (!list || list.dataset.bound === '1') return;
+      list.dataset.bound = '1';
+      list.addEventListener('input', (e) => {
+        const textarea = e.target.closest('textarea[data-vocab-definition][data-vocab-key]');
+        if (!textarea) return;
+        state.vocabView.pendingNotes.set(textarea.dataset.vocabKey, textarea.value || '');
+      });
+      list.addEventListener('click', async (e) => {
+        const levelBtn = e.target.closest('[data-vocab-level][data-vocab-key]');
+        if (levelBtn) {
+          const level = levelBtn.dataset.vocabLevel ? Number(levelBtn.dataset.vocabLevel) : null;
+          await updateVocabularyEntryLevel(levelBtn.dataset.vocabKey, level);
+          return;
+        }
+        const saveBtn = e.target.closest('[data-save-vocab-definition][data-vocab-key]');
+        if (!saveBtn) return;
+        const key = saveBtn.dataset.vocabKey;
+        const textarea = list.querySelector(`textarea[data-vocab-definition][data-vocab-key="${CSS.escape(key)}"]`);
+        await updateUserDefinition(key, textarea?.value || '');
+        state.vocabView.pendingNotes.delete(key);
+        getFilteredVocabularyEntries();
+        resetVocabularyListRender();
+      });
+    }
+
     async function updateVocabularyEntryLevel(vocabKey, level) {
       await setTokenFamiliarity(vocabKey, level);
-      await renderVocabularyView();
+      getFilteredVocabularyEntries();
+      resetVocabularyListRender();
     }
 
     async function renderVocabularyView() {
       state.route = 'vocabulary';
       const app = $('#app');
-      const allEntries = [...state.vocabMap.values()].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-      const entries = filterVocabularyEntries(allEntries, state.vocabFilters.query, state.vocabFilters.level);
-      app.innerHTML = `
-        <div class="library-shell">
-          <div class="library-card">
-            <div class="toolbar" style="margin-bottom:0;">
-              <button id="backLibraryBtn" class="library-action-btn" type="button">← Biblioteca</button>
+      if (!state.vocabView.initialized || !app.querySelector('#vocabList')) {
+        app.innerHTML = `
+          <div class="library-shell">
+            <div class="library-card">
+              <div class="toolbar" style="margin-bottom:0;">
+                <button id="backLibraryBtn" class="library-action-btn" type="button">← Biblioteca</button>
+              </div>
+              <h1 class="library-headline" style="margin-top:14px;">
+                <span class="library-title">Vocabulario</span>
+              </h1>
+              <div class="library-toolbar">
+                <input id="vocabSearch" type="search" placeholder="Buscar palabra" value="${escapeHtml(state.vocabFilters.query)}" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                <select id="vocabLevelFilter" style="min-height:56px;border-radius:18px;padding:12px 16px;">
+                  <option value="all">Todos los niveles</option>
+                  <option value="1">Nivel 1</option>
+                  <option value="2">Nivel 2</option>
+                  <option value="3">Nivel 3</option>
+                  <option value="4">Nivel 4</option>
+                  <option value="5">Nivel 5</option>
+                  <option value="none">Sin nivel</option>
+                </select>
+              </div>
+              <p id="vocabStatus" class="status library-status"></p>
             </div>
-            <h1 class="library-headline" style="margin-top:14px;">
-              <span class="library-title">Vocabulario</span>
-            </h1>
-            <div class="library-toolbar">
-              <input id="vocabSearch" type="search" placeholder="Buscar palabra" value="${escapeHtml(state.vocabFilters.query)}" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
-              <select id="vocabLevelFilter" style="min-height:56px;border-radius:18px;padding:12px 16px;">
-                <option value="all">Todos los niveles</option>
-                <option value="1">Nivel 1</option>
-                <option value="2">Nivel 2</option>
-                <option value="3">Nivel 3</option>
-                <option value="4">Nivel 4</option>
-                <option value="5">Nivel 5</option>
-                <option value="none">Sin nivel</option>
-              </select>
-            </div>
-            <p class="status library-status">${entries.length} entradas mostradas · ${allEntries.length} guardadas.</p>
-          </div>
-          <div class="vocab-list">
-            ${entries.length ? entries.map((entry) => `
-              <article class="vocab-item" style="border-radius:24px;padding:16px 16px 14px;box-shadow:var(--shadow-soft);">
-                <div class="vocab-main">
-                  <strong style="font-size:1.2rem;">${escapeHtml(entry.surface || entry.lemma || entry.vocabKey)}</strong>
-                  ${entry.readingKana ? `<span class="badge">${escapeHtml(entry.readingKana)}</span>` : ''}
-                  <span class="badge level">Nivel ${escapeHtml(String(entry.familiarityLevel ?? '—'))}</span>
-                </div>
-                ${entry.defaultDefinition ? `<p class="meta" style="margin:10px 0 0;">${escapeHtml(entry.defaultDefinition)}</p>` : ''}
-                <textarea data-vocab-definition data-vocab-key="${escapeHtml(entry.vocabKey)}" placeholder="Tu definición / nota">${escapeHtml(entry.userDefinition || '')}</textarea>
-                <div class="level-picker">
-                  <button type="button" class="level-btn" data-vocab-level="1" data-vocab-key="${escapeHtml(entry.vocabKey)}">1</button>
-                  <button type="button" class="level-btn" data-vocab-level="2" data-vocab-key="${escapeHtml(entry.vocabKey)}">2</button>
-                  <button type="button" class="level-btn" data-vocab-level="3" data-vocab-key="${escapeHtml(entry.vocabKey)}">3</button>
-                  <button type="button" class="level-btn" data-vocab-level="4" data-vocab-key="${escapeHtml(entry.vocabKey)}">4</button>
-                  <button type="button" class="level-btn" data-vocab-level="5" data-vocab-key="${escapeHtml(entry.vocabKey)}">5</button>
-                  <button type="button" class="level-btn" data-vocab-key="${escapeHtml(entry.vocabKey)}">Quitar</button>
-                  <button type="button" class="library-action-btn" data-save-vocab-definition data-vocab-key="${escapeHtml(entry.vocabKey)}" style="min-height:42px;padding:8px 14px;border-radius:999px;">Guardar nota</button>
-                </div>
-              </article>
-            `).join('') : `<div class="library-card"><p class="empty">No hay palabras guardadas todavía.</p></div>`}
-          </div>
-        </div>`;
+            <div class="vocab-list" id="vocabList"></div>
+            <p id="vocabLoadState" class="status library-status" style="text-align:center;margin-top:8px;"></p>
+            <div id="vocabLoadMoreSentinel" aria-hidden="true" style="height:1px;"></div>
+          </div>`;
+        state.vocabView.initialized = true;
+        $('#backLibraryBtn')?.addEventListener('click', () => {
+          state.vocabView.loadMoreObserver?.disconnect();
+          state.vocabView.initialized = false;
+          renderLibraryView();
+        });
+        $('#vocabSearch')?.addEventListener('input', (e) => {
+          state.vocabFilters.query = e.target.value || '';
+          scheduleVocabularyListRefresh(200);
+        });
+        $('#vocabLevelFilter')?.addEventListener('change', (e) => {
+          state.vocabFilters.level = e.target.value;
+          getFilteredVocabularyEntries();
+          resetVocabularyListRender();
+        });
+        attachVocabularyEventDelegation(app);
+        setupVocabularyLoadMoreObserver();
+      } else {
+        $('#vocabSearch').value = state.vocabFilters.query;
+      }
       $('#vocabLevelFilter').value = state.vocabFilters.level;
-      $('#backLibraryBtn').addEventListener('click', renderLibraryView);
-      $('#vocabSearch').addEventListener('input', (e) => {
-        state.vocabFilters.query = e.target.value || '';
-        renderVocabularyView();
-      });
-      $('#vocabLevelFilter').addEventListener('change', (e) => {
-        state.vocabFilters.level = e.target.value;
-        renderVocabularyView();
-      });
-      app.querySelectorAll('[data-vocab-level]').forEach((btn) => btn.addEventListener('click', () => {
-        const level = btn.dataset.vocabLevel ? Number(btn.dataset.vocabLevel) : null;
-        updateVocabularyEntryLevel(btn.dataset.vocabKey, level);
-      }));
-      app.querySelectorAll('[data-save-vocab-definition]').forEach((btn) => btn.addEventListener('click', async () => {
-        const key = btn.dataset.vocabKey;
-        const textarea = app.querySelector(`textarea[data-vocab-definition][data-vocab-key="${CSS.escape(key)}"]`);
-        await updateUserDefinition(key, textarea?.value || '');
-        await renderVocabularyView();
-      }));
+      getFilteredVocabularyEntries();
+      resetVocabularyListRender();
     }
 
     // =========================
@@ -2366,6 +2540,8 @@
 
     async function renderLibraryView() {
       state.route = 'library';
+      state.vocabView.loadMoreObserver?.disconnect();
+      state.vocabView.initialized = false;
       const app = $('#app');
       const progressMap = new Map();
       for (const b of state.books) progressMap.set(b.id, await getBookProgress(b.id));
