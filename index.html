@@ -226,6 +226,12 @@
       pointer-events: auto;
     }
     .token-panel h3 { margin: 0; font-size: 1.05rem; }
+    .token-lemma-line {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.94rem;
+      font-weight: 400;
+    }
     .token-panel-handle {
       width: 86px;
       height: 7px;
@@ -1509,12 +1515,19 @@
       const meanings = entry.meanings || dictionaryResult?.meanings || [];
       const dictionaryDefinition = entry.defaultDefinition || meanings[0] || '—';
       const hasUserDefinition = Boolean(entry.userDefinition);
+      const displaySurface = entry.surface || token.surface || '—';
+      const lemmaText = entry.lemma || dictionaryResult?.lemma || token.baseForm || null;
+      const readingText = entry.readingKana || dictionaryResult?.readingKana || null;
+      const showLemmaLine = Boolean(lemmaText || readingText);
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
           <div class="token-panel-handle" aria-hidden="true"></div>
           <div class="toolbar" style="margin-bottom: 8px; align-items: center;">
-            <h3>${escapeHtml(entry.surface || token.surface || '—')} <span class="hiragana">(${escapeHtml(entry.readingKana || '—')})</span></h3>
+            <div>
+              <h3>${escapeHtml(displaySurface)}</h3>
+              ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span></div>` : ''}
+            </div>
             <div class="spacer"></div>
             <button id="markAsKnownBtn" class="icon-btn" title="Marcar como visto">✓</button>
           </div>
@@ -1630,16 +1643,25 @@
 
     async function openTokenPanel(token, context = {}) {
       if (!isInteractiveToken(token)) return;
-      let entry = await upsertVocabEntryFromToken(token, context);
-      if (!entry) return;
-      const request = buildDictionaryLookupRequest(token);
+      // Lookup primero para persistir una identidad léxica mejor (lemma resuelto cuando exista).
+      const request = buildDictionaryLookupRequest(token, context);
       const dictionaryResult = await lookupDictionaryEntry(request, token, context);
-      const enriched = enrichVocabEntryWithDictionaryData(entry, dictionaryResult, token);
+      const resolvedSurface = request.candidateSurfaces?.[request.candidateSurfaces.length - 1] || token.surface;
+      const resolvedToken = {
+        ...token,
+        surface: dictionaryResult?.queriedSurface || resolvedSurface || token.surface,
+        baseForm: dictionaryResult?.lemma || token.baseForm,
+        reading: dictionaryResult?.readingKana || token.reading,
+        pos: dictionaryResult?.pos || token.pos
+      };
+      let entry = await upsertVocabEntryFromToken(resolvedToken, context);
+      if (!entry) return;
+      const enriched = enrichVocabEntryWithDictionaryData(entry, dictionaryResult, resolvedToken);
       await dbPut(STORES.vocabEntries, enriched);
       state.vocabMap.set(enriched.vocabKey, enriched);
       entry = enriched;
       state.tokenSelection = {
-        token,
+        token: resolvedToken,
         entry,
         draftLevel: entry.familiarityLevel ?? null,
         dictionaryResult,
@@ -1715,8 +1737,69 @@
       return out.replace(/-+/g, '');
     }
 
+
     function normalizeLookupKey(value) {
       return normalizeTokenSurface(value || '').toLowerCase();
+    }
+
+    function isKanaChunk(text) {
+      const s = normalizeTokenSurface(text || '');
+      if (!s) return false;
+      return /^[ぁ-ゖー]+$/u.test(s);
+    }
+
+    function isLookupJoinableToken(token) {
+      if (!token) return false;
+      if (!token.isJapanese) return false;
+      if (!token.surface || !token.surface.trim()) return false;
+      return token.tokenType !== 'punct' && token.tokenType !== 'space' && token.tokenType !== 'empty';
+    }
+
+    function isLikelyInflectionContinuation(surface) {
+      const s = normalizeTokenSurface(surface || '');
+      if (!s) return false;
+      const chunks = new Set([
+        'っ','て','で','た','だ','ない','なかった','ます','ました','ません','たい','たくない','たいです',
+        'んで','んだ','いて','いで','して','した','れる','られる','せる','させる','くない','かった','そう'
+      ]);
+      if (chunks.has(s)) return true;
+      if (isKanaChunk(s) && s.length <= 4) return true;
+      return /^(ている|でいる|てる|でる|ちゃう|じゃう|かった|くない|ない|ます|ました)$/u.test(s);
+    }
+
+    // Reconstruye candidatos de lookup sin alterar la segmentación visual.
+    function buildLookupCandidatesFromContext(token, context = {}) {
+      const baseSurface = token?.surface || '';
+      if (!baseSurface) return [];
+      const out = [];
+      const seen = new Set();
+      const push = (value) => {
+        const normalized = normalizeTokenSurface(value || '');
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        out.push(value);
+      };
+      push(baseSurface);
+
+      const bookId = context.bookId;
+      const sectionIndex = Number.isFinite(token?.sectionIndex) ? token.sectionIndex : context.sectionIndex;
+      const sentenceIndex = Number.isFinite(token?.sentenceIndex) ? token.sentenceIndex : context.sentenceIndex;
+      const tokenIndex = Number.isFinite(token?.tokenIndex) ? token.tokenIndex : context.tokenIndex;
+      if (!Number.isInteger(sectionIndex) || !Number.isInteger(sentenceIndex) || !Number.isInteger(tokenIndex)) return out;
+
+      const sentencePayload = getTokenizedSentence(bookId, sectionIndex, sentenceIndex);
+      const sentenceTokens = Array.isArray(sentencePayload?.tokens) ? sentencePayload.tokens : [];
+      if (!sentenceTokens.length || !sentenceTokens[tokenIndex]) return out;
+
+      let combined = token.surface || '';
+      for (let i = tokenIndex + 1; i < Math.min(sentenceTokens.length, tokenIndex + 4); i++) {
+        const nextToken = sentenceTokens[i];
+        if (!isLookupJoinableToken(nextToken)) break;
+        if (!isLikelyInflectionContinuation(nextToken.surface)) break;
+        combined += nextToken.surface || '';
+        push(combined);
+      }
+      return out;
     }
 
     // =========================
@@ -1858,17 +1941,35 @@
     function applyDeinflectionRules(surface) {
       const s = normalizeTokenSurface(surface || '');
       if (!s) return [];
-      const out = [{ form: s, reason: 'exact' }];
+      const out = [];
+      const seen = new Set();
+      const add = (form, reason) => {
+        const normalized = normalizeTokenSurface(form || '');
+        if (!normalized || seen.has(normalized)) return;
+        if (normalized.length <= 1 && normalized !== s) return;
+        seen.add(normalized);
+        out.push({ form: normalized, reason });
+      };
+      add(s, 'exact');
       const rules = [
-        ['ました', 'る', 'polite-past'], ['ます', 'る', 'polite'], ['ない', 'る', 'negative'], ['なかった', 'る', 'negative-past'],
+        ['ませんでした', 'る', 'polite-negative-past'], ['ません', 'る', 'polite-negative'],
+        ['ました', 'る', 'polite-past'], ['ます', 'る', 'polite'], ['なかった', 'る', 'negative-past'], ['ない', 'る', 'negative'],
+        ['かった', 'い', 'adj-past'], ['くない', 'い', 'adj-negative'],
         ['った', 'う', 'past-godan-u'], ['った', 'つ', 'past-godan-tsu'], ['った', 'る', 'past-godan-ru'],
-        ['いた', 'く', 'past-godan-ku'], ['いだ', 'ぐ', 'past-godan-gu'], ['んだ', 'む', 'past-godan-mu'],
-        ['んだ', 'ぶ', 'past-godan-bu'], ['んだ', 'ぬ', 'past-godan-nu'], ['した', 'す', 'past-godan-su'],
-        ['ている', 'る', 'teiru-ichidan'], ['てる', 'る', 'teiru-short'], ['した', 'する', 'suru-past'], ['して', 'する', 'suru-te']
+        ['いて', 'く', 'te-godan-ku'], ['いた', 'く', 'past-godan-ku'],
+        ['いで', 'ぐ', 'te-godan-gu'], ['いだ', 'ぐ', 'past-godan-gu'],
+        ['んで', 'む', 'te-godan-mu'], ['んで', 'ぶ', 'te-godan-bu'], ['んで', 'ぬ', 'te-godan-nu'],
+        ['んだ', 'む', 'past-godan-mu'], ['んだ', 'ぶ', 'past-godan-bu'], ['んだ', 'ぬ', 'past-godan-nu'],
+        ['して', 'す', 'te-godan-su'], ['した', 'す', 'past-godan-su'],
+        ['って', 'う', 'te-godan-u'], ['って', 'つ', 'te-godan-tsu'], ['って', 'る', 'te-godan-ru'],
+        ['ている', 'る', 'progressive-teiru'], ['てる', 'る', 'progressive-teru'],
+        ['て', 'る', 'te-ichidan'], ['た', 'る', 'past-ichidan'],
+        ['した', 'する', 'suru-past'], ['して', 'する', 'suru-te'],
+        ['きた', 'くる', 'kuru-past-kana'], ['来た', '来る', 'kuru-past-kanji']
       ];
       for (const [suffix, replacement, reason] of rules) {
         if (s.endsWith(suffix) && s.length > suffix.length) {
-          out.push({ form: s.slice(0, -suffix.length) + replacement, reason });
+          add(s.slice(0, -suffix.length) + replacement, reason);
         }
       }
       return out;
@@ -1899,10 +2000,15 @@
       const lemmaKey = normalizeLookupKey(token?.baseForm || context?.lemma);
       const surfaceKey = normalizeLookupKey(token?.surface || context?.surface);
       const readingKey = normalizeLookupKey(convertReadingToHiragana(token?.reading || context?.reading));
+      const candidateSurfaceKeys = new Set((context?.candidateSurfaces || []).map((s) => normalizeLookupKey(s)).filter(Boolean));
+      const deinflectedKeys = new Set((context?.deinflections || []).map((d) => normalizeLookupKey(d?.form)).filter(Boolean));
       return [...candidates].map((entry) => {
         let score = 0;
         if (entry.lemmaKey && entry.lemmaKey === lemmaKey) score += 120;
         if (entry.surfaceKey && entry.surfaceKey === surfaceKey) score += 80;
+        if (entry.surfaceKey && candidateSurfaceKeys.has(entry.surfaceKey)) score += 95;
+        if (entry.lemmaKey && deinflectedKeys.has(entry.lemmaKey)) score += 90;
+        if (entry.surfaceKey && deinflectedKeys.has(entry.surfaceKey)) score += 75;
         if (entry.readingKey && readingKey && entry.readingKey === readingKey) score += 60;
         if (entry.meanings?.length) score += 10;
         if (entry.bestGloss) score += 5;
@@ -1915,13 +2021,23 @@
       return rankedCandidates[0].entry;
     }
 
-    function buildDictionaryLookupRequest(token) {
+    function buildDictionaryLookupRequest(token, context = {}) {
       const reading = convertReadingToHiragana(token?.reading || null);
-      const deinflections = applyDeinflectionRules(token?.surface || '');
+      const candidateSurfaces = buildLookupCandidatesFromContext(token, context);
+      const deinflectionMap = new Map();
+      for (const candidate of candidateSurfaces) {
+        for (const d of applyDeinflectionRules(candidate)) {
+          const key = normalizeLookupKey(d.form);
+          if (!key || deinflectionMap.has(key)) continue;
+          deinflectionMap.set(key, d);
+        }
+      }
+      const deinflections = [...deinflectionMap.values()];
       return {
-        surface: token?.surface || '',
+        surface: candidateSurfaces[candidateSurfaces.length - 1] || token?.surface || '',
         lemma: token?.baseForm || '',
         reading,
+        candidateSurfaces,
         deinflections
       };
     }
@@ -1938,9 +2054,11 @@
 
     async function lookupDictionaryEntry(request, token, context = {}) {
       const lookupKey = [
+        'v2',
         normalizeLookupKey(request.lemma),
         normalizeLookupKey(request.surface),
         normalizeLookupKey(request.reading),
+        ...(request.candidateSurfaces || []).map((s) => normalizeLookupKey(s)),
         ...request.deinflections.map((d) => normalizeLookupKey(d.form))
       ].filter(Boolean).join('|');
 
@@ -1949,9 +2067,11 @@
 
       const buckets = [];
       if (request.lemma) buckets.push(...await lookupByLemma(request.lemma, request.reading));
-      if (request.surface) buckets.push(...await lookupBySurface(request.surface));
+      for (const candidateSurface of request.candidateSurfaces || []) {
+        buckets.push(...await lookupBySurface(candidateSurface));
+      }
       if (request.reading) buckets.push(...await lookupByReading(request.reading));
-      for (const deinflected of request.deinflections.slice(1, 8)) {
+      for (const deinflected of request.deinflections.slice(1, 16)) {
         buckets.push(...await lookupByLemma(deinflected.form, request.reading));
         buckets.push(...await lookupBySurface(deinflected.form));
       }
@@ -1966,7 +2086,7 @@
         found: true,
         lookupKey,
         source: best.source || 'local-pack',
-        queriedSurface: request.surface || null,
+        queriedSurface: request.surface || request.candidateSurfaces?.[0] || null,
         lemma: best.lemma || request.lemma || null,
         readingKana: best.readingKana || convertReadingToHiragana(request.reading || token?.reading || null),
         readingRomaji: best.readingRomaji || convertReadingToRomaji(best.readingKana || request.reading || token?.reading || null),
@@ -1977,7 +2097,7 @@
       } : {
         found: false,
         lookupKey,
-        queriedSurface: request.surface || null,
+        queriedSurface: request.surface || request.candidateSurfaces?.[0] || null,
         lemma: request.lemma || null,
         readingKana: convertReadingToHiragana(request.reading || token?.reading),
         readingRomaji: convertReadingToRomaji(request.reading || token?.reading),
