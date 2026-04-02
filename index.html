@@ -6,32 +6,49 @@
   <title>JP Reader</title>
   <style>
     :root {
-      --bg: #eeebfa;
-      --surface: #ffffff;
-      --text: #1f2430;
-      --muted: #5f6b7a;
-      --primary: #2563eb;
-      --danger: #dc2626;
-      --border: #dbe2ea;
+      --bg: #efecf7;
+      --surface: #f7f5fb;
+      --surface-strong: #ffffff;
+      --surface-soft: #f1eef7;
+      --text: #252230;
+      --muted: #7a7488;
+      --primary: #7e78a2;
+      --danger: #b2445e;
+      --border: #cdc6db;
+      --toggle-bg: #e5dfef;
+      --toggle-active: #ffffff;
+      --shadow-soft: 0 14px 34px rgba(116, 102, 153, 0.14);
+      --shadow-strong: 0 18px 42px rgba(116, 102, 153, 0.18);
     }
     [data-theme="dark"] {
-      --bg: #0f172a;
-      --surface: #111827;
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --primary: #60a5fa;
-      --danger: #f87171;
-      --border: #374151;
+      --bg: #111628;
+      --surface: #1b2134;
+      --surface-strong: #22293e;
+      --surface-soft: #262d45;
+      --text: #f1eef8;
+      --muted: #b8b2c9;
+      --primary: #a59cc8;
+      --danger: #f39ab0;
+      --border: #48506b;
+      --toggle-bg: #313852;
+      --toggle-active: #454e6c;
+      --shadow-soft: 0 18px 38px rgba(0, 0, 0, 0.28);
+      --shadow-strong: 0 22px 46px rgba(0, 0, 0, 0.34);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
+      min-height: 100vh;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      background: var(--bg);
+      background: radial-gradient(circle at top, color-mix(in srgb, var(--bg) 88%, #ffffff 12%), var(--bg) 62%);
       color: var(--text);
       font-size: 16px;
     }
-    .app { max-width: 728px; margin: 0 auto; padding: 28px 22px 64px; }
+    .app {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px calc(env(safe-area-inset-bottom, 0px) + 34px);
+    }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
     .spacer { flex: 1; }
@@ -210,141 +227,70 @@
       border: 2px solid color-mix(in srgb, var(--text) 70%, transparent);
       background: transparent;
     }
-    [data-theme="light"] body {
-      background:
-        radial-gradient(circle at top, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0) 34%),
-        linear-gradient(180deg, #f2eefb 0%, #ece7f7 100%);
-      color: #27242d;
-    }
-    .library-shell {
-      display: grid;
-      gap: 24px;
-    }
+    .library-shell { display: grid; gap: 18px; }
     .library-card,
     .book-tile {
-      position: relative;
-      background: rgba(248, 246, 251, 0.92);
-      border: 1px solid rgba(208, 201, 221, 0.92);
-      box-shadow: 0 18px 36px rgba(124, 109, 160, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.82);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+      background: color-mix(in srgb, var(--surface) 90%, var(--surface-strong) 10%);
+      border: 1px solid var(--border);
+      border-radius: 34px;
+      box-shadow: var(--shadow-soft);
     }
     .library-card {
-      border-radius: 38px;
-      padding: 24px 24px 20px;
+      padding: 22px 20px 20px;
     }
     .library-headline {
-      display: block;
-      margin: 0 0 18px;
+      margin: 0;
     }
     .library-title {
       display: block;
-      font-size: clamp(2.65rem, 10vw, 4.25rem);
-      line-height: 0.95;
-      letter-spacing: -0.05em;
-      font-weight: 760;
+      font-size: clamp(2.35rem, 9vw, 4.15rem);
+      font-weight: 800;
+      line-height: 0.94;
+      letter-spacing: -0.045em;
     }
     .library-toolbar {
-      display: flex;
+      display: grid;
       gap: 12px;
-      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .library-actions-row {
+      display: flex;
+      gap: 10px;
       align-items: center;
-      margin-top: 0;
+      flex-wrap: wrap;
     }
     .library-action-btn {
-      min-height: 60px;
-      padding: 0 24px;
-      border-radius: 18px;
-      border: 1px solid rgba(186, 180, 199, 0.95);
-      background: linear-gradient(180deg, #fbfafd 0%, #f1eef7 100%);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 2px rgba(88, 77, 123, 0.08);
-      font-size: clamp(1.02rem, 3vw, 1.22rem);
+      border-radius: 17px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
+      color: var(--text);
+      box-shadow: 0 3px 10px rgba(108, 95, 144, 0.06);
+      padding: 12px 20px;
+      font-size: 1rem;
       font-weight: 500;
+      min-height: 58px;
     }
-    .library-theme-row {
-      display: flex;
-      justify-content: flex-start;
-      margin-top: 14px;
-    }
-    .theme-segmented {
-      display: inline-grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px;
-      padding: 4px;
-      border: 0;
-      border-radius: 999px;
-      background: linear-gradient(180deg, #e2dee9 0%, #dcd7e6 100%);
-      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.75);
-    }
-    .theme-segmented button {
-      min-width: 138px;
-      border: 0;
-      border-radius: 999px;
-      background: transparent;
-      color: #625d6e;
-      padding: 13px 18px;
-      cursor: pointer;
-      font-size: clamp(1.06rem, 3.6vw, 1.28rem);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-    }
-    .theme-segmented button.active {
-      background: linear-gradient(180deg, #ffffff 0%, #f6f3fb 100%);
-      color: #24212b;
-      box-shadow: 0 8px 16px rgba(112, 97, 150, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-    }
-    .theme-icon {
-      width: 22px;
-      height: 22px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex: 0 0 auto;
-    }
-    .theme-icon svg {
-      width: 100%;
-      height: 100%;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 1.8;
-      stroke-linecap: round;
-      stroke-linejoin: round;
+    .library-action-btn:hover {
+      background: color-mix(in srgb, var(--surface-strong) 70%, var(--surface-soft) 30%);
     }
     .library-status {
-      margin: 18px 0 0;
-      font-size: clamp(1rem, 2.9vw, 1.1rem);
-      line-height: 1.38;
-      color: #6b6678;
+      margin: 14px 0 0;
+      font-size: clamp(1rem, 4vw, 1.08rem);
+      line-height: 1.35;
+      max-width: 34ch;
     }
     .book-shelf {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 24px;
-    }
-    .book-tile {
-      border-radius: 36px;
-      padding: 18px 18px 30px;
-      display: grid;
       gap: 18px;
     }
-    .book-cover-wrap {
+    .book-tile {
+      position: relative;
+      padding: 16px 16px 28px;
       display: grid;
-      place-items: center;
-      border-radius: 28px;
-      border: 1px solid rgba(196, 188, 212, 0.98);
-      min-height: 300px;
-      background: linear-gradient(180deg, #e7dff5 0%, #d6cdea 100%);
-      overflow: hidden;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-    }
-    .book-cover-wrap .cover {
-      width: 100%;
-      height: min(78vw, 430px);
-      border-radius: 0;
-      border: 0;
-      object-fit: cover;
+      gap: 14px;
+      overflow: visible;
+      box-shadow: var(--shadow-strong);
     }
     .book-cover-button {
       width: 100%;
@@ -353,205 +299,189 @@
       background: transparent;
       cursor: pointer;
     }
+    .book-cover-wrap {
+      position: relative;
+      display: block;
+      width: 100%;
+      aspect-ratio: 1.58 / 1;
+      border-radius: 28px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      background: color-mix(in srgb, var(--surface-soft) 72%, #cabfe4 28%);
+    }
+    .book-cover-wrap .cover {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border: 0;
+      border-radius: 0;
+      object-fit: cover;
+      object-position: center top;
+      background: transparent;
+    }
     .book-header {
       display: grid;
       gap: 6px;
-      padding: 0 4px;
+      padding: 0 2px;
     }
     .book-title {
       margin: 0;
-      font-size: clamp(1.95rem, 5.8vw, 2.75rem);
-      line-height: 1.08;
+      font-size: clamp(1.35rem, 6vw, 2.25rem);
+      line-height: 1.12;
       letter-spacing: -0.03em;
-      font-weight: 700;
     }
-    .book-meta {
+    .book-author {
       margin: 0;
-      color: #76707f;
-      font-size: clamp(1.02rem, 3vw, 1.16rem);
-      line-height: 1.3;
+      color: var(--muted);
+      font-size: clamp(1rem, 4vw, 1.08rem);
     }
     .book-progress-shell {
       position: relative;
-      border: 1px solid rgba(206, 198, 219, 0.95);
-      border-radius: 28px;
-      padding: 18px 18px 68px;
-      margin-top: 12px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(243, 240, 248, 0.82) 100%);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 16px 18px 70px;
+      margin-top: 2px;
+      background: color-mix(in srgb, var(--surface-strong) 78%, var(--surface-soft) 22%);
+      min-height: 140px;
     }
     .book-progress-head {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      font-size: clamp(1.06rem, 3.2vw, 1.25rem);
-      margin-bottom: 10px;
-      color: #25232d;
+      gap: 14px;
+      font-size: clamp(1.02rem, 4.2vw, 1.13rem);
       font-weight: 500;
+      margin-bottom: 12px;
     }
-    .book-progress-left {
-      flex: 1 1 auto;
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .book-progress-right {
-      flex: 0 0 auto;
-      color: #3a3643;
-      font-variant-numeric: tabular-nums;
+    .book-progress-head span:last-child {
+      color: var(--text);
       white-space: nowrap;
     }
     .book-progress-shell input[type="range"] {
-      -webkit-appearance: none;
-      appearance: none;
       width: 100%;
-      height: 30px;
       padding: 0;
-      border: 0;
-      background: transparent;
-      margin: 0;
-    }
-    .book-progress-shell input[type="range"]:disabled {
-      opacity: 1;
-      cursor: default;
-    }
-    .book-progress-shell input[type="range"]::-webkit-slider-runnable-track {
-      height: 6px;
-      border-radius: 999px;
-      background: #c7c1d8;
-    }
-    .book-progress-shell input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      margin-top: -10px;
-      width: 28px;
-      height: 28px;
-      border-radius: 999px;
-      border: 1px solid #c6bfd3;
-      background: linear-gradient(180deg, #ffffff 0%, #ece9f5 100%);
-      box-shadow: 0 4px 10px rgba(113, 98, 150, 0.15);
-    }
-    .book-progress-shell input[type="range"]::-moz-range-track {
-      height: 6px;
-      border-radius: 999px;
-      background: #c7c1d8;
-    }
-    .book-progress-shell input[type="range"]::-moz-range-thumb {
-      width: 28px;
-      height: 28px;
-      border-radius: 999px;
-      border: 1px solid #c6bfd3;
-      background: linear-gradient(180deg, #ffffff 0%, #ece9f5 100%);
-      box-shadow: 0 4px 10px rgba(113, 98, 150, 0.15);
-    }
-    .book-footer {
-      position: relative;
-      min-height: 44px;
-      margin-top: 0;
+      accent-color: color-mix(in srgb, var(--primary) 84%, #dad4eb 16%);
+      opacity: 0.95;
     }
     .book-play-main {
       position: absolute;
       left: 50%;
-      bottom: -50px;
+      bottom: -18px;
       transform: translateX(-50%);
-      width: 102px;
-      height: 102px;
-      padding: 0;
+      width: 86px;
+      height: 86px;
       border-radius: 999px;
-      border: 2.2px solid rgba(79, 73, 94, 0.82);
-      background: linear-gradient(180deg, #fbfafd 0%, #ece7f6 100%);
-      display: grid;
-      place-items: center;
+      border: 2px solid color-mix(in srgb, var(--text) 48%, transparent);
+      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
+      font-size: 2rem;
+      line-height: 1;
       cursor: pointer;
-      box-shadow: 0 10px 24px rgba(109, 95, 147, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-      z-index: 2;
-      justify-self: unset;
-    }
-    .book-play-main svg {
-      width: 34px;
-      height: 34px;
-      fill: currentColor;
-      transform: translateX(2px);
+      box-shadow: 0 8px 18px rgba(92, 83, 122, 0.1);
     }
     .book-delete-btn {
       position: absolute;
-      right: -4px;
-      bottom: -18px;
-      width: 58px;
-      height: 58px;
+      right: 14px;
+      bottom: 14px;
+      width: 54px;
+      height: 54px;
       padding: 0;
       border-radius: 999px;
       display: grid;
       place-items: center;
-      font-size: 0;
-      color: #2b2831;
-      background: rgba(236, 232, 244, 0.92);
-      border: 1px solid rgba(210, 204, 223, 0.95);
-      box-shadow: 0 6px 16px rgba(111, 99, 149, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.75);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      font-size: 1.4rem;
+      color: var(--text);
+      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(92, 83, 122, 0.08);
     }
-    .book-delete-btn svg {
-      width: 25px;
-      height: 25px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 1.8;
-      stroke-linecap: round;
-      stroke-linejoin: round;
+    .segmented-toggle {
+      display: inline-grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: fit-content;
+      min-width: 250px;
+      max-width: 100%;
+      border: 0;
+      border-radius: 999px;
+      padding: 4px;
+      background: var(--toggle-bg);
+      gap: 4px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+    }
+    .segmented-toggle button {
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      padding: 10px 16px;
+      cursor: pointer;
+      min-width: 0;
+      min-height: 50px;
+      font-size: 1rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .segmented-toggle button.active {
+      background: var(--toggle-active);
+      color: var(--text);
+      box-shadow: 0 6px 14px rgba(71, 64, 105, 0.16);
+    }
+    .toggle-icon {
+      font-size: 1.15rem;
+      line-height: 1;
     }
     .upload-book-tile {
       cursor: pointer;
+      align-items: center;
     }
     .upload-book-tile .book-cover-wrap {
+      display: grid;
+      place-items: center;
+      aspect-ratio: 1.58 / 1;
       border-style: dashed;
       transition: border-color 120ms ease, background-color 120ms ease;
-      background: linear-gradient(180deg, #f7f5fb 0%, #ece8f6 100%);
+      background: color-mix(in srgb, var(--surface-soft) 70%, #d9e2ff 30%);
     }
     .upload-book-tile .upload-plus {
-      width: 96px;
-      height: 96px;
-      padding: 0;
+      width: 88px;
+      height: 88px;
       border-radius: 999px;
       display: grid;
       place-items: center;
+      font-size: 2.6rem;
       line-height: 1;
-      border: 1px solid rgba(190, 184, 205, 0.95);
-      background: linear-gradient(180deg, #ffffff 0%, #f2eef8 100%);
-      box-shadow: 0 8px 18px rgba(110, 98, 147, 0.12);
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-strong) 70%, #dbeafe 30%);
       color: var(--text);
-    }
-    .upload-book-tile .upload-plus svg {
-      width: 36px;
-      height: 36px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 1.8;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .upload-book-tile.dragover .book-cover-wrap {
       border-color: var(--primary);
-      background: linear-gradient(180deg, #eef3ff 0%, #dbe7ff 100%);
+      background: color-mix(in srgb, var(--surface-soft) 56%, #c7d2fe 44%);
     }
-    @media (max-width: 520px) {
-      .app {
-        padding-left: 16px;
-        padding-right: 16px;
-      }
-      .library-card {
-        padding: 22px 18px 18px;
-      }
-      .book-tile {
-        padding: 16px 16px 28px;
-      }
-      .theme-segmented button {
-        min-width: 0;
-        width: 100%;
-        padding-inline: 14px;
-      }
+    [data-theme="dark"] .library-card,
+    [data-theme="dark"] .book-tile,
+    [data-theme="dark"] .book-progress-shell {
+      background: color-mix(in srgb, var(--surface) 88%, var(--surface-strong) 12%);
+    }
+    [data-theme="dark"] .book-cover-wrap {
+      background: color-mix(in srgb, var(--surface-soft) 82%, #9884cc 18%);
+    }
+    [data-theme="dark"] .segmented-toggle button.active,
+    [data-theme="dark"] .library-action-btn,
+    [data-theme="dark"] .book-play-main,
+    [data-theme="dark"] .book-delete-btn,
+    [data-theme="dark"] .upload-book-tile .upload-plus {
+      background: color-mix(in srgb, var(--surface-strong) 88%, var(--surface-soft) 12%);
+    }
+    @media (max-width: 430px) {
+      .library-card { padding: 20px 18px 18px; }
+      .library-actions-row { gap: 10px; }
+      .library-action-btn { padding: 11px 16px; }
+      .segmented-toggle { min-width: 0; width: 100%; }
+      .segmented-toggle button { padding-inline: 12px; }
+      .book-tile { padding: 14px 14px 28px; }
+      .book-progress-shell { padding-inline: 16px; }
     }
   </style>
 </head>
@@ -640,14 +570,6 @@
       }
     };
 
-    const ICONS = {
-      sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.72 5.28l-1.56 1.56M6.84 17.16l-1.56 1.56M18.72 18.72l-1.56-1.56M6.84 6.84 5.28 5.28"></path></svg>',
-      moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 14.2A8.7 8.7 0 1 1 9.8 3.8a7.1 7.1 0 0 0 10.4 10.4Z"></path></svg>',
-      play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.4v11.2c0 .5.54.81.98.56l8.85-5.6a.64.64 0 0 0 0-1.08l-8.85-5.6A.64.64 0 0 0 8 6.4Z"></path></svg>',
-      trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.5h15"></path><path d="M9.5 10.5v6.5"></path><path d="M14.5 10.5v6.5"></path><path d="M7.5 7.5 8.2 19a2 2 0 0 0 2 1.9h3.6a2 2 0 0 0 2-1.9l.7-11.5"></path><path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7"></path></svg>',
-      plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>'
-    };
-
     // =========================
     // Utilidades generales
     // =========================
@@ -660,23 +582,6 @@
     function formatDate(iso) {
       if (!iso) return '—';
       try { return new Date(iso).toLocaleString(); } catch { return iso; }
-    }
-
-    function formatDateTimeShort(iso) {
-      if (!iso) return '—';
-      try {
-        return new Intl.DateTimeFormat('es-ES', {
-          day: 'numeric',
-          month: 'numeric',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        }).format(new Date(iso));
-      } catch {
-        return formatDate(iso);
-      }
     }
 
     function uuid() {
@@ -1021,7 +926,8 @@
           const now = new Date().toISOString();
           const book = {
             id: uuid(), fileName: file.name, title: meta.title, author: meta.author,
-            cover: meta.coverDataUrl, createdAt: now, updatedAt: now, lastOpenedAt: null
+            cover: meta.coverDataUrl, sectionCount: meta.sections.length,
+            createdAt: now, updatedAt: now, lastOpenedAt: null
           };
           await saveBook(book, file);
         } catch (err) {
@@ -1839,27 +1745,13 @@
 
     async function persistCurrentProgress() {
       if (!state.currentBookId) return;
-      const chapterCurrent = Math.min(state.currentSpineIndex + 1, Math.max(state.sections.length, 1));
-      const chapterTotal = Math.max(state.sections.length, 1);
-      const sectionSentences = getSentencesForSection(state.sections[state.currentSpineIndex] || {});
-      const sentenceTotal = Math.max(sectionSentences.length, 1);
-      const sentenceCurrent = Math.min(Math.max(state.currentSentenceIndex + 1, 1), sentenceTotal);
-      const chapterPercent = (chapterCurrent / chapterTotal) * 100;
-      const displayPercent = state.readingMode === 'sentence'
-        ? (sentenceCurrent / sentenceTotal) * 100
-        : chapterPercent;
-
+      const percent = ((state.currentSpineIndex + 1) / Math.max(state.sections.length, 1)) * 100;
       await saveReadingProgress(state.currentBookId, {
         readingMode: state.readingMode,
         currentLocation: state.sections[state.currentSpineIndex]?.path || null,
         currentSectionIndex: state.currentSpineIndex,
         currentSentenceIndex: state.currentSentenceIndex,
-        percent: Number(chapterPercent.toFixed(2)),
-        displayPercent: Number(displayPercent.toFixed(2)),
-        chapterCurrent,
-        chapterTotal,
-        sentenceCurrent,
-        sentenceTotal
+        percent: Number(percent.toFixed(2))
       });
     }
 
@@ -1930,48 +1822,51 @@
       const allEntries = [...state.vocabMap.values()].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
       const entries = filterVocabularyEntries(allEntries, state.vocabFilters.query, state.vocabFilters.level);
       app.innerHTML = `
-        <div class="card">
-          <div class="toolbar">
-            <button id="backLibraryBtn">← Biblioteca</button>
-            <h1 style="margin:0;font-size:1.2rem;">🧠 Vocabulario (Fase 4)</h1>
-            <div class="spacer"></div>
-            <input id="vocabSearch" placeholder="Buscar surface / lemma / hiragana / romaji / definición" value="${escapeHtml(state.vocabFilters.query)}" />
-            <label>Nivel
-              <select id="vocabLevelFilter">
-                <option value="all">Todos</option>
-                <option value="none">Sin valorar</option>
-                ${[1,2,3,4,5].map((n) => `<option value="${n}">${n}</option>`).join('')}
+        <div class="library-shell">
+          <div class="library-card">
+            <div class="toolbar" style="margin-bottom:0;">
+              <button id="backLibraryBtn" class="library-action-btn" type="button">← Biblioteca</button>
+            </div>
+            <h1 class="library-headline" style="margin-top:14px;">
+              <span class="library-title">Vocabulario</span>
+            </h1>
+            <div class="library-toolbar">
+              <input id="vocabSearch" type="search" placeholder="Buscar palabra" value="${escapeHtml(state.vocabFilters.query)}" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+              <select id="vocabLevelFilter" style="min-height:56px;border-radius:18px;padding:12px 16px;">
+                <option value="all">Todos los niveles</option>
+                <option value="1">Nivel 1</option>
+                <option value="2">Nivel 2</option>
+                <option value="3">Nivel 3</option>
+                <option value="4">Nivel 4</option>
+                <option value="5">Nivel 5</option>
+                <option value="none">Sin nivel</option>
               </select>
-            </label>
+            </div>
+            <p class="status library-status">${entries.length} entradas mostradas · ${allEntries.length} guardadas.</p>
           </div>
-          <p class="status">Entradas: ${entries.length} (total: ${allEntries.length}). Con diccionario offline local y definición personalizada de usuario (Fase 4).</p>
           <div class="vocab-list">
             ${entries.length ? entries.map((entry) => `
-              <article class="vocab-item">
+              <article class="vocab-item" style="border-radius:24px;padding:16px 16px 14px;box-shadow:var(--shadow-soft);">
                 <div class="vocab-main">
-                  <strong>${escapeHtml(entry.surface || entry.normalizedKey)}</strong>
-                  <span class="badge">${escapeHtml(`lemma: ${entry.lemma || '—'}`)}</span>
-                  <span class="badge">${escapeHtml(`hiragana: ${entry.readingKana || '—'}`)}</span>
-                  <span class="badge">${escapeHtml(`romaji: ${entry.readingRomaji || '—'}`)}</span>
-                  <span class="badge">${escapeHtml(entry.pos || 'pos: —')}</span>
-                  <span class="badge level">Nivel: ${entry.familiarityLevel ?? 'Sin valorar'}</span>
+                  <strong style="font-size:1.2rem;">${escapeHtml(entry.surface || entry.lemma || entry.vocabKey)}</strong>
+                  ${entry.readingKana ? `<span class="badge">${escapeHtml(entry.readingKana)}</span>` : ''}
+                  <span class="badge level">Nivel ${escapeHtml(String(entry.familiarityLevel ?? '—'))}</span>
                 </div>
-                <p class="meta"><strong>Sugerida:</strong> ${escapeHtml(entry.defaultDefinition || 'Sin definición sugerida disponible')}</p>
-                <p class="meta"><strong>Tu definición:</strong> ${escapeHtml(entry.userDefinition || '—')}</p>
-                <p class="meta">Apariciones pulsadas: ${entry.timesClicked || 0} · Primera vez: ${formatDate(entry.firstSeenAt)} · Última actualización: ${formatDate(entry.updatedAt)}</p>
-                <div class="toolbar" style="margin-top: 6px;">
-                  ${[1,2,3,4,5].map((lvl) => `<button data-vocab-level="${lvl}" data-vocab-key="${escapeHtml(entry.vocabKey)}">${lvl}</button>`).join('')}
-                  <button data-vocab-level="" data-vocab-key="${escapeHtml(entry.vocabKey)}">Sin valorar</button>
-                </div>
-                <textarea data-vocab-definition="1" data-vocab-key="${escapeHtml(entry.vocabKey)}" placeholder="Definición personalizada...">${escapeHtml(entry.userDefinition || '')}</textarea>
-                <div class="toolbar" style="margin-top: 6px;">
-                  <button class="primary" data-save-vocab-definition="1" data-vocab-key="${escapeHtml(entry.vocabKey)}">Guardar definición</button>
+                ${entry.defaultDefinition ? `<p class="meta" style="margin:10px 0 0;">${escapeHtml(entry.defaultDefinition)}</p>` : ''}
+                <textarea data-vocab-definition data-vocab-key="${escapeHtml(entry.vocabKey)}" placeholder="Tu definición / nota">${escapeHtml(entry.userDefinition || '')}</textarea>
+                <div class="level-picker">
+                  <button type="button" class="level-btn" data-vocab-level="1" data-vocab-key="${escapeHtml(entry.vocabKey)}">1</button>
+                  <button type="button" class="level-btn" data-vocab-level="2" data-vocab-key="${escapeHtml(entry.vocabKey)}">2</button>
+                  <button type="button" class="level-btn" data-vocab-level="3" data-vocab-key="${escapeHtml(entry.vocabKey)}">3</button>
+                  <button type="button" class="level-btn" data-vocab-level="4" data-vocab-key="${escapeHtml(entry.vocabKey)}">4</button>
+                  <button type="button" class="level-btn" data-vocab-level="5" data-vocab-key="${escapeHtml(entry.vocabKey)}">5</button>
+                  <button type="button" class="level-btn" data-vocab-key="${escapeHtml(entry.vocabKey)}">Quitar</button>
+                  <button type="button" class="library-action-btn" data-save-vocab-definition data-vocab-key="${escapeHtml(entry.vocabKey)}" style="min-height:42px;padding:8px 14px;border-radius:999px;">Guardar nota</button>
                 </div>
               </article>
-            `).join('') : `<div class="empty">Todavía no has seleccionado palabras en el lector.</div>`}
+            `).join('') : `<div class="library-card"><p class="empty">No hay palabras guardadas todavía.</p></div>`}
           </div>
-        </div>
-      `;
+        </div>`;
       $('#vocabLevelFilter').value = state.vocabFilters.level;
       $('#backLibraryBtn').addEventListener('click', renderLibraryView);
       $('#vocabSearch').addEventListener('input', (e) => {
@@ -2005,28 +1900,6 @@
       return dbGet(STORES.progress, bookId);
     }
 
-    function formatProgressPercent(value) {
-      const safe = Number.isFinite(Number(value)) ? Number(value) : 0;
-      return `${safe.toFixed(2)}%`;
-    }
-
-    function getLibraryProgressSnapshot(progress) {
-      const chapterCurrent = Math.max(1, Number(progress?.chapterCurrent || ((progress?.currentSectionIndex ?? 0) + 1)) || 1);
-      const chapterTotal = Math.max(1, Number(progress?.chapterTotal || chapterCurrent) || 1);
-      const hasSentenceData = progress?.sentenceTotal != null || progress?.readingMode === 'sentence';
-      const sentenceCurrent = Math.max(1, Number(progress?.sentenceCurrent || ((progress?.currentSentenceIndex ?? 0) + 1)) || 1);
-      const sentenceTotal = Math.max(1, Number(progress?.sentenceTotal || sentenceCurrent) || 1);
-      const rawPercent = Math.max(0, Math.min(100, Number(progress?.displayPercent ?? progress?.percent ?? 0) || 0));
-      const positionText = hasSentenceData
-        ? `${chapterCurrent}/${chapterTotal} | ${sentenceCurrent}/${sentenceTotal}`
-        : `${chapterCurrent}/${chapterTotal}`;
-      return {
-        rawPercent,
-        percentLabel: formatProgressPercent(rawPercent),
-        positionText
-      };
-    }
-
     async function renderLibraryView() {
       state.route = 'library';
       const app = $('#app');
@@ -2040,53 +1913,57 @@
               <span class="library-title">JP Reader</span>
             </h1>
             <div class="library-toolbar">
-              <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
-              <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
+              <div class="library-actions-row">
+                <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
+                <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
+              </div>
               <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
               <input id="epubInput" class="hidden" type="file" accept=".epub,application/epub+zip" multiple />
-            </div>
-            <div class="library-theme-row">
-              <div id="libraryThemeToggle" class="segmented-toggle theme-segmented" role="group" aria-label="Tema">
-                <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}"><span class="theme-icon">${ICONS.sun}</span><span>Claro</span></button>
-                <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}"><span class="theme-icon">${ICONS.moon}</span><span>Oscuro</span></button>
+              <div id="libraryThemeToggle" class="segmented-toggle" role="group" aria-label="Tema">
+                <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}"><span class="toggle-icon">☀︎</span><span>Claro</span></button>
+                <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}"><span class="toggle-icon">☾</span><span>Oscuro</span></button>
               </div>
             </div>
-            <p class="library-status">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDateTimeShort(state.dictionaryStatus.lastImportedAt)}.</p>
-            ${state.dictionaryStatus.importMessage ? `<p class="library-status">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
+            <p class="status library-status">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</p>
+            ${state.dictionaryStatus.importMessage ? `<p class="status library-status" style="margin-top:6px;">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
           </div>
           <div class="book-shelf">
             ${state.books.length ? state.books.map((b) => {
             const pg = progressMap.get(b.id);
-            const snapshot = getLibraryProgressSnapshot(pg);
+            const percent = pg?.percent != null ? `${pg.percent}%` : '0%';
+            const sectionTotal = Math.max(b.sectionCount || ((pg?.currentSectionIndex ?? 0) + 1), 1);
+            const sectionCurrent = Math.min((pg?.currentSectionIndex ?? 0) + 1, sectionTotal);
+            const sentenceCurrent = Math.max((pg?.currentSentenceIndex ?? 0) + 1, 1);
+            const rightLabel = pg?.readingMode === 'sentence'
+              ? `${sectionCurrent}/${sectionTotal} | ${sentenceCurrent}/${sentenceCurrent}`
+              : `${sectionCurrent}/${sectionTotal} | 1/1`;
             return `
               <article class="book-tile">
                 <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
-                  <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title)}" />` : `<div class="cover"></div>`}</div>
+                  <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title || b.fileName)}" />` : `<div class="cover"></div>`}</div>
                 </button>
                 <div class="book-header">
                   <h2 class="book-title">${escapeHtml(b.title || b.fileName)}</h2>
-                  <p class="book-meta">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
-                  <div class="book-progress-shell">
-                    <div class="book-progress-head">
-                      <span class="book-progress-left">Progreso aprox.: ${snapshot.percentLabel}</span>
-                      <span class="book-progress-right">${snapshot.positionText}</span>
-                    </div>
-                    <input type="range" min="0" max="100" value="${snapshot.rawPercent}" disabled />
-                    <div class="book-footer">
-                      <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura">${ICONS.play}</button>
-                      <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro">${ICONS.trash}</button>
-                    </div>
+                  <p class="book-author">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
+                </div>
+                <div class="book-progress-shell">
+                  <div class="book-progress-head">
+                    <span>Progreso aprox.: ${percent}</span>
+                    <span>${rightLabel}</span>
                   </div>
+                  <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
+                  <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura">▶</button>
+                  <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro">🗑</button>
                 </div>
               </article>`;
           }).join('') : ''}
             <article id="uploadBookTile" class="book-tile upload-book-tile" role="button" tabindex="0" aria-label="Subir EPUB">
               <div class="book-cover-wrap">
-                <button id="uploadBookBtn" class="upload-plus" type="button" aria-label="Subir EPUB">${ICONS.plus}</button>
+                <button id="uploadBookBtn" class="upload-plus" type="button" aria-label="Subir EPUB">+</button>
               </div>
               <div class="book-header">
                 <h2 class="book-title">Subir epub</h2>
-                <p class="book-meta">Haz clic en + o arrastra un .epub aquí.</p>
+                <p class="book-author">Haz clic en + o arrastra un .epub aquí.</p>
               </div>
             </article>
           </div>
@@ -2150,11 +2027,8 @@
         renderLibraryView();
       });
 
-      app.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const book = state.books.find((b) => b.id === btn.dataset.delete);
-        const label = book?.title || book?.fileName || 'este libro';
-        if (!confirm(`¿Borrar ${label}? Esta acción elimina el EPUB y el progreso guardado.`)) return;
+      app.querySelectorAll('[data-delete]').forEach((btn) => btn.addEventListener('click', async () => {
+        if (!confirm('¿Seguro que quieres borrar este libro y su progreso?')) return;
         await deleteBook(btn.dataset.delete);
         await refreshBooks();
         renderLibraryView();

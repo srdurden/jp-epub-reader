@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jp-epub-reader-v5';
+const CACHE_NAME = 'jp-epub-reader-v6';
 const APP_SHELL = ['./', './index.html', './sw.js'];
 
 self.addEventListener('install', (event) => {
