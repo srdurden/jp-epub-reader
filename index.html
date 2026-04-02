@@ -40,7 +40,7 @@
       margin: 0;
       min-height: 100vh;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      background: radial-gradient(circle at top, color-mix(in srgb, var(--bg) 88%, #ffffff 12%), var(--bg) 62%);
+      background: var(--bg);
       color: var(--text);
       font-size: 16px;
     }
@@ -74,7 +74,40 @@
       background: color-mix(in srgb, var(--surface) 94%, #e5e7eb 6%);
       border: 1px solid var(--border);
       border-radius: 22px;
-      padding: 12px 14px;
+      padding: 16px 14px 14px;
+      position: relative;
+    }
+    .reader-close-bubble {
+      position: absolute;
+      top: -16px;
+      right: 16px;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-strong);
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 600;
+      display: grid;
+      place-items: center;
+      box-shadow: var(--shadow-soft);
+      z-index: 2;
+    }
+    .reader-quick-nav {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .reader-quick-nav button {
+      display: grid;
+      place-items: center;
+      gap: 4px;
+      padding: 10px 8px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 95%, #eef2f8 5%);
+      font-size: 0.84rem;
     }
     .reader-top {
       display: grid;
@@ -99,7 +132,7 @@
     .icon-btn:hover { background: color-mix(in srgb, var(--border) 55%, transparent); }
     .reader-progress {
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      grid-template-columns: 1fr;
       align-items: center;
       gap: 10px;
     }
@@ -204,22 +237,6 @@
     .meanings-list li { margin: 2px 0; color: var(--muted); }
     .status { color: var(--muted); font-size: 0.9rem; }
     .hidden { display: none !important; }
-    .reader-bottom-nav {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .reader-bottom-nav button {
-      display: grid;
-      place-items: center;
-      gap: 4px;
-      padding: 10px 8px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: color-mix(in srgb, var(--surface) 95%, #eef2f8 5%);
-      font-size: 0.84rem;
-    }
     .sentence-hero {
       display: grid;
       place-items: center;
@@ -2273,6 +2290,13 @@
       app.innerHTML = `
         <div class="reader-shell">
           <div class="reader-card">
+            <button id="readerExitBtn" class="reader-close-bubble" title="Volver al menú principal">✕</button>
+            <div class="reader-quick-nav">
+              <button id="prevBtn">◀<span>Anterior</span></button>
+              <button id="nextBtn">▶<span>Siguiente</span></button>
+              <button id="toggleModeBtn">⇄<span>Frase/Página</span></button>
+              <button id="openReaderMenuBtn">☰<span>Menú</span></button>
+            </div>
             <div id="readerMenu" class="toolbar hidden">
               <div class="reader-headline">
                 <strong>${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</strong>
@@ -2280,7 +2304,6 @@
                 <span class="status">Progreso aprox.: ${percent}%${state.readingMode === 'sentence' ? ` · ${sentenceCurrent} / ${sentenceTotal} | ${chapterCurrent} / ${chapterTotal}` : ''}</span>
               </div>
               <div class="reader-progress">
-                <button id="backBtn" class="icon-btn" title="Volver a biblioteca">✕</button>
                 <input id="sectionProgress" type="range" min="0" max="${Math.max(state.sections.length - 1, 0)}" value="${state.currentSpineIndex}" />
               </div>
               <button id="openVocabReaderBtn">Vocabulario</button>
@@ -2313,19 +2336,13 @@
           <div class="reader-content-wrap">
             <div class="reader-content">${state.readingMode === 'page' ? renderPageMode(section, state.currentSpineIndex) : renderSentenceMode(section)}</div>
           </div>
-          <div class="reader-bottom-nav">
-            <button id="prevBtn">◀<span>Anterior</span></button>
-            <button id="nextBtn">▶<span>Siguiente</span></button>
-            <button id="toggleModeBtn">⇄<span>Frase/Página</span></button>
-            <button id="openReaderMenuBtn">☰<span>Menú</span></button>
-          </div>
         </div>
       `;
 
       $('#modeSelect').value = state.readingMode;
       $('#sectionSelect').value = String(state.currentSpineIndex);
 
-      $('#backBtn').addEventListener('click', async () => {
+      $('#readerExitBtn').addEventListener('click', async () => {
         closeTokenPanel();
         await persistCurrentProgress();
         await refreshBooks();
