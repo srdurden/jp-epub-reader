@@ -1507,7 +1507,7 @@
         state.tokenSelection.entry = updated;
         state.tokenSelection.draftLevel = updated.familiarityLevel;
         applyFamiliarityStyles(updated.vocabKey, updated.familiarityLevel);
-        renderTokenPanel();
+        closeTokenPanel();
       }));
       $('#userDefinitionInput')?.addEventListener('input', (e) => {
         state.tokenSelection.userDefinitionDraft = e.target.value || '';
