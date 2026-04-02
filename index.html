@@ -2138,7 +2138,7 @@
       await Promise.all(staticCacheKeys.map((key) => caches.delete(key)));
 
       if ('serviceWorker' in navigator) {
-        const registration = await navigator.serviceWorker.getRegistration('./sw.js') || await navigator.serviceWorker.getRegistration();
+        const registration = await navigator.serviceWorker.getRegistration();
         await registration?.update();
       }
     }
@@ -2527,10 +2527,51 @@
       document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
     }
 
+    function createServiceWorkerSource() {
+      return `
+const CACHE_NAME = 'jp-epub-reader-v7';
+const APP_SHELL = ['./', './index.html'];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+      return fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match('./index.html'));
+    })
+  );
+});`;
+    }
+
     async function registerServiceWorker() {
       if (!('serviceWorker' in navigator)) return;
       try {
-        await navigator.serviceWorker.register('./sw.js');
+        const serviceWorkerSource = createServiceWorkerSource();
+        const workerBlob = new Blob([serviceWorkerSource], { type: 'text/javascript' });
+        const workerUrl = URL.createObjectURL(workerBlob);
+        try {
+          await navigator.serviceWorker.register(workerUrl, { scope: './' });
+        } finally {
+          URL.revokeObjectURL(workerUrl);
+        }
       } catch (e) {
         console.warn('No se pudo registrar SW', e);
       }
