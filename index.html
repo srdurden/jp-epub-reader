@@ -2273,19 +2273,16 @@
       app.innerHTML = `
         <div class="reader-shell">
           <div class="reader-card">
-            <div class="reader-top">
-              <div class="reader-progress">
-                <button id="backBtn" class="icon-btn" title="Volver a biblioteca">✕</button>
-                <input id="sectionProgress" type="range" min="0" max="${Math.max(state.sections.length - 1, 0)}" value="${state.currentSpineIndex}" />
-                <button id="openReaderMenuBtn" class="icon-btn" title="Más opciones">⋯</button>
-              </div>
+            <div id="readerMenu" class="toolbar hidden">
               <div class="reader-headline">
                 <strong>${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</strong>
                 <span class="status">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</span>
                 <span class="status">Progreso aprox.: ${percent}%${state.readingMode === 'sentence' ? ` · ${sentenceCurrent} / ${sentenceTotal} | ${chapterCurrent} / ${chapterTotal}` : ''}</span>
               </div>
-            </div>
-            <div id="readerMenu" class="toolbar hidden">
+              <div class="reader-progress">
+                <button id="backBtn" class="icon-btn" title="Volver a biblioteca">✕</button>
+                <input id="sectionProgress" type="range" min="0" max="${Math.max(state.sections.length - 1, 0)}" value="${state.currentSpineIndex}" />
+              </div>
               <button id="openVocabReaderBtn">Vocabulario</button>
               <label>Modo
                 <select id="modeSelect"><option value="page">Página</option><option value="sentence">Frase</option></select>
@@ -2319,8 +2316,8 @@
           <div class="reader-bottom-nav">
             <button id="prevBtn">◀<span>Anterior</span></button>
             <button id="nextBtn">▶<span>Siguiente</span></button>
-            <button id="openVocabBottomBtn">☰<span>Vocabulario</span></button>
-            <button id="toggleModeBtn">⇄<span>${state.readingMode === 'page' ? 'Frase' : 'Página'}</span></button>
+            <button id="toggleModeBtn">⇄<span>Frase/Página</span></button>
+            <button id="openReaderMenuBtn">☰<span>Menú</span></button>
           </div>
         </div>
       `;
@@ -2342,10 +2339,6 @@
         renderReaderView();
       });
       $('#openVocabReaderBtn').addEventListener('click', async () => {
-        await persistCurrentProgress();
-        renderVocabularyView();
-      });
-      $('#openVocabBottomBtn').addEventListener('click', async () => {
         await persistCurrentProgress();
         renderVocabularyView();
       });
