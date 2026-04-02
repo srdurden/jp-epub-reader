@@ -226,6 +226,25 @@
     .token-grid .v { font-weight: 500; word-break: break-word; }
     .token-grid .hiragana { color: var(--muted); font-size: 0.95rem; }
     .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .token-panel-footer {
+      margin-top: 12px;
+      display: flex;
+      justify-content: center;
+    }
+    .custom-definition-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .custom-definition-actions {
+      display: inline-flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .chatgpt-btn {
+      margin-top: 8px;
+      width: fit-content;
+    }
     .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
     .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
     .vocab-list { display: grid; gap: 10px; }
@@ -1461,7 +1480,7 @@
         return;
       }
       const meanings = entry.meanings || dictionaryResult?.meanings || [];
-      const firstDefinition = entry.userDefinition || entry.defaultDefinition || meanings[0] || 'Sin definición disponible.';
+      const dictionaryDefinition = entry.defaultDefinition || meanings[0] || 'Sin definición disponible.';
       const hasUserDefinition = Boolean(entry.userDefinition);
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
@@ -1473,12 +1492,17 @@
             <button id="markAsKnownBtn" class="icon-btn" title="Marcar como visto">✓</button>
           </div>
           <div class="token-grid">
-            <span class="v">${escapeHtml(firstDefinition)}</span>
-            ${hasUserDefinition ? `<div class="v" style="display:flex; gap:8px; align-items:flex-start;"><span>${escapeHtml(entry.userDefinition)}</span><button id="editUserDefinitionBtn" class="icon-btn" title="Editar definición personalizada">✏️</button></div>` : ''}
-          </div>
-          <div class="level-picker" aria-label="Nivel de conocimiento">
-            ${[1,2,3,4,5].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
-            <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
+            <span class="v">${escapeHtml(dictionaryDefinition)}</span>
+            ${hasUserDefinition ? `
+              <div class="v custom-definition-row">
+                <span class="custom-definition-actions">
+                  <button id="editUserDefinitionBtn" class="icon-btn" title="Editar definición personalizada">✎</button>
+                  <button id="deleteUserDefinitionBtn" class="icon-btn" title="Borrar definición personalizada">🗑</button>
+                </span>
+                <span>${escapeHtml(entry.userDefinition)}</span>
+              </div>
+            ` : ''}
+            <button id="askChatgptBtn" class="chatgpt-btn">chatgpt</button>
           </div>
           <div style="margin-top:8px; ${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
             <label for="userDefinitionInput"><strong>Definición personalizada</strong></label>
@@ -1487,6 +1511,12 @@
               <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
             </div>
           </div>
+          <footer class="token-panel-footer">
+            <div class="level-picker" aria-label="Nivel de conocimiento">
+              ${[1,2,3,4,5].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
+              <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
+            </div>
+          </footer>
         </aside>
       `;
       const readerContent = $('.reader-content');
@@ -1525,6 +1555,21 @@
         state.tokenSelection.isEditingUserDefinition = true;
         state.tokenSelection.userDefinitionDraft = entry.userDefinition || '';
         renderTokenPanel();
+      });
+      $('#deleteUserDefinitionBtn')?.addEventListener('click', async () => {
+        const updated = await updateUserDefinition(entry.vocabKey, '');
+        if (!updated) return;
+        state.tokenSelection.entry = updated;
+        state.tokenSelection.userDefinitionDraft = '';
+        state.tokenSelection.isEditingUserDefinition = true;
+        renderTokenPanel();
+      });
+      $('#askChatgptBtn')?.addEventListener('click', () => {
+        const promptWord = entry.surface || token.surface || token.baseForm || '';
+        if (!promptWord.trim()) return;
+        const prompt = `Dame la lectura en hiragana y la traducción de "${promptWord}"`;
+        const url = 'https://chatgpt.com/?q=' + encodeURIComponent(prompt);
+        window.open(url, '_blank', 'noopener,noreferrer');
       });
       $('#removeVocabEntryBtn')?.addEventListener('click', async () => {
         const existing = await loadVocabEntryByKey(entry.vocabKey);
