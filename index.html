@@ -1507,7 +1507,7 @@
         return;
       }
       const meanings = entry.meanings || dictionaryResult?.meanings || [];
-      const dictionaryDefinition = entry.defaultDefinition || meanings[0] || 'Sin definición disponible.';
+      const dictionaryDefinition = entry.defaultDefinition || meanings[0] || '—';
       const hasUserDefinition = Boolean(entry.userDefinition);
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
