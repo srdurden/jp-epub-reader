@@ -501,6 +501,28 @@
       font-size: 1.15rem;
       line-height: 1;
     }
+    .theme-toggle-small {
+      min-width: 208px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .theme-toggle-small button {
+      min-height: 40px;
+      padding: 7px 12px;
+      font-size: 0.9rem;
+      gap: 7px;
+    }
+    .theme-toggle-small .toggle-icon {
+      font-size: 1rem;
+    }
+    .library-footer {
+      margin-top: -8px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.74rem;
+      line-height: 1.35;
+      opacity: 0.9;
+    }
     .upload-book-tile {
       cursor: pointer;
       align-items: center;
@@ -550,6 +572,7 @@
       .library-action-btn { padding: 11px 16px; }
       .segmented-toggle { min-width: 0; width: 100%; }
       .segmented-toggle button { padding-inline: 12px; }
+      .theme-toggle-small button { min-height: 38px; font-size: 0.85rem; }
       .book-tile { padding: 14px 14px 28px; }
       .book-progress-shell { padding: 15px 16px 52px; }
       .book-play-main {
@@ -2015,12 +2038,11 @@
             <div class="library-toolbar">
               <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
               <input id="epubInput" class="hidden" type="file" accept=".epub,application/epub+zip" multiple />
-              <div id="libraryThemeToggle" class="segmented-toggle" role="group" aria-label="Tema">
+              <div id="libraryThemeToggle" class="segmented-toggle theme-toggle-small" role="group" aria-label="Tema">
                 <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}"><span class="toggle-icon">☀︎</span><span>Claro</span></button>
                 <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}"><span class="toggle-icon">☾</span><span>Oscuro</span></button>
               </div>
             </div>
-            <p class="status library-status">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</p>
             ${state.dictionaryStatus.importMessage ? `<p class="status library-status" style="margin-top:6px;">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
           </div>
           <div class="book-shelf">
@@ -2067,6 +2089,7 @@
               </div>
             </article>
           </div>
+          <footer class="library-footer">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</footer>
         </div>`;
 
       $('#epubInput').addEventListener('change', async (e) => {
