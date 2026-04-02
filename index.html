@@ -121,6 +121,12 @@
     }
     .reader-content iframe { width: 100%; min-height: 56vh; border: 0; }
     .sentence-box { font-size: 1.35em; line-height: 1.9; white-space: pre-wrap; }
+    .page-mode-text {
+      font-size: 1.08em;
+      line-height: 1.95;
+      white-space: pre-wrap;
+    }
+    .page-sentence { margin: 0 0 0.4em; }
     .segmented-line {
       display: flex;
       flex-wrap: wrap;
@@ -1176,6 +1182,20 @@
       return cacheTokenizationResult(cacheKey, { sentence, tokens });
     }
 
+    function getTokenizedSection(bookId, sectionIndex) {
+      const section = state.sections[sectionIndex];
+      if (!section) return [];
+      const sentences = getSentencesForSection(section);
+      return sentences.map((_, sentenceIndex) => getTokenizedSentence(bookId, sectionIndex, sentenceIndex));
+    }
+
+    function renderTokenizedPageSection(bookId, sectionIndex) {
+      const tokenizedSentences = getTokenizedSection(bookId, sectionIndex);
+      if (!tokenizedSentences.length) return '<p class="status">Sin texto legible en esta sección.</p>';
+      return `<div class="page-mode-text">${tokenizedSentences.map((payload) => `<p class="page-sentence">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`).join('')}</div>`;
+    }
+
+
     function attachTokenMetadata(token) {
       const debug = `${token.pos}${token.baseForm ? ` · ${token.baseForm}` : ''}`;
       const interactive = isInteractiveToken(token);
@@ -2173,9 +2193,11 @@
       }));
     }
 
-    function renderPageMode(section) {
-      const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:serif;line-height:1.8;font-size:${state.settings.fontSize}px;padding:8px;color:${state.settings.theme==='dark'?'#e5e7eb':'#1f2430'};background:${state.settings.theme==='dark'?'#111827':'#fff'};max-width:100%;}img{max-width:100%;height:auto;}a{color:inherit;text-decoration:underline;}</style></head><body>${section.html}</body></html>`;
-      return `<iframe title="Contenido EPUB" srcdoc="${escapeHtml(html)}"></iframe>`;
+    function renderPageMode(section, sectionIndex) {
+      return `
+        <div id="tokenPanelHost"></div>
+        ${renderTokenizedPageSection(state.currentBookId, sectionIndex)}
+      `;
     }
 
     function renderSentenceMode(section) {
@@ -2269,7 +2291,7 @@
             </div>
           </div>
           <div class="reader-content-wrap">
-            <div class="reader-content">${state.readingMode === 'page' ? renderPageMode(section) : renderSentenceMode(section)}</div>
+            <div class="reader-content">${state.readingMode === 'page' ? renderPageMode(section, state.currentSpineIndex) : renderSentenceMode(section)}</div>
           </div>
           <div class="reader-bottom-nav">
             <button id="prevBtn">◀<span>Anterior</span></button>
@@ -2333,6 +2355,16 @@
         await saveSettings({ fontSize: Number(e.target.value) });
         renderReaderView();
       });
+
+      if (state.readingMode === 'page') {
+        $('.reader-content')?.addEventListener('click', async (e) => {
+          const tokenEl = e.target.closest('.token[data-interactive="1"]');
+          if (!tokenEl) return;
+          const token = getTokenFromElement(tokenEl);
+          await openTokenPanel(token, { bookId: state.currentBookId });
+          speakNativeTts(token?.surface || token?.baseForm || '', { lang: 'ja-JP' });
+        });
+      }
 
       if (state.readingMode === 'sentence') {
         $('#playSentenceBtn')?.addEventListener('click', () => {
