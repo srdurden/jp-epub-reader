@@ -226,6 +226,12 @@
       pointer-events: auto;
     }
     .token-panel h3 { margin: 0; font-size: 1.05rem; }
+    .token-lemma-line {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.94rem;
+      font-weight: 400;
+    }
     .token-panel-handle {
       width: 86px;
       height: 7px;
@@ -1509,12 +1515,19 @@
       const meanings = entry.meanings || dictionaryResult?.meanings || [];
       const dictionaryDefinition = entry.defaultDefinition || meanings[0] || '—';
       const hasUserDefinition = Boolean(entry.userDefinition);
+      const displaySurface = entry.surface || token.surface || '—';
+      const lemmaText = entry.lemma || dictionaryResult?.lemma || token.baseForm || null;
+      const readingText = entry.readingKana || dictionaryResult?.readingKana || null;
+      const showLemmaLine = Boolean(lemmaText || readingText);
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
           <div class="token-panel-handle" aria-hidden="true"></div>
           <div class="toolbar" style="margin-bottom: 8px; align-items: center;">
-            <h3>${escapeHtml(entry.surface || token.surface || '—')} <span class="hiragana">(${escapeHtml(entry.readingKana || '—')})</span></h3>
+            <div>
+              <h3>${escapeHtml(displaySurface)}</h3>
+              ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span></div>` : ''}
+            </div>
             <div class="spacer"></div>
             <button id="markAsKnownBtn" class="icon-btn" title="Marcar como visto">✓</button>
           </div>
