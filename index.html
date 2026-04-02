@@ -1363,8 +1363,24 @@
       const tokenizedSentences = getTokenizedSection(bookId, sectionIndex);
       if (!tokenizedSentences.length) return '<p class="status">Sin texto legible en esta sección.</p>';
       const safeStart = Math.max(0, Math.min(Number(startSentenceIndex) || 0, tokenizedSentences.length - 1));
-      const visibleSentences = tokenizedSentences.slice(safeStart);
-      return `<div class="page-mode-text">${visibleSentences.map((payload) => `<p class="page-sentence">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`).join('')}</div>`;
+      return `<div class="page-mode-text">${tokenizedSentences.map((payload, sentenceIndex) => `<p class="page-sentence ${sentenceIndex === safeStart ? 'current-sentence' : ''}" data-sentence-index="${sentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`).join('')}</div>`;
+    }
+
+    function alignPageModeToCurrentSentence() {
+      const target = document.querySelector(`.page-sentence[data-sentence-index="${state.currentSentenceIndex}"]`);
+      if (!target) return;
+      const stickyHeader = $('.reader-card');
+      const stickyHeight = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0;
+      const topPadding = 10;
+      const targetTop = window.scrollY + target.getBoundingClientRect().top - stickyHeight - topPadding;
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: 'auto' });
+    }
+
+    function syncCurrentSentenceFromToken(token) {
+      if (!Number.isInteger(token?.sentenceIndex)) return;
+      const sectionSentences = getSentencesForSection(state.sections[state.currentSpineIndex] || {});
+      const cap = Math.max(sectionSentences.length - 1, 0);
+      state.currentSentenceIndex = Math.max(0, Math.min(token.sentenceIndex, cap));
     }
 
 
@@ -2690,9 +2706,11 @@
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
           if (!tokenEl) return;
           const token = getTokenFromElement(tokenEl);
+          syncCurrentSentenceFromToken(token);
           await openTokenPanel(token, { bookId: state.currentBookId });
           speakNativeTts(token?.surface || token?.baseForm || '', { lang: 'ja-JP' });
         });
+        requestAnimationFrame(() => requestAnimationFrame(() => alignPageModeToCurrentSentence()));
       }
 
       if (state.readingMode === 'sentence') {
@@ -2715,6 +2733,7 @@
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
           if (!tokenEl) return;
           const token = getTokenFromElement(tokenEl);
+          syncCurrentSentenceFromToken(token);
           await openTokenPanel(token, { bookId: state.currentBookId });
           speakNativeTts(token?.surface || token?.baseForm || '', { lang: 'ja-JP' });
         });
