@@ -589,6 +589,62 @@
     [data-theme="dark"] .upload-book-tile .upload-plus {
       background: color-mix(in srgb, var(--surface-strong) 88%, var(--surface-soft) 12%);
     }
+    @media (min-width: 960px) {
+      .app {
+        width: min(1640px, 100%);
+        max-width: none;
+        padding-left: 24px;
+        padding-right: 24px;
+      }
+      .library-shell { gap: 22px; }
+      .library-card { padding: 26px 24px 22px; }
+      .book-shelf {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 18px;
+        align-items: start;
+      }
+      .book-tile {
+        border-radius: 28px;
+        padding: 14px 14px 24px;
+        gap: 10px;
+      }
+      .book-cover-wrap {
+        border-radius: 20px;
+        aspect-ratio: 0.8 / 1;
+      }
+      .book-title {
+        font-size: clamp(1.08rem, 1.3vw, 1.3rem);
+        line-height: 1.22;
+      }
+      .book-author {
+        font-size: 0.88rem;
+      }
+      .book-progress-shell {
+        border-radius: 18px;
+        min-height: 96px;
+        padding: 12px 14px 46px;
+      }
+      .book-progress-head {
+        margin-bottom: 8px;
+        font-size: 0.92rem;
+        gap: 8px;
+      }
+      .book-play-main {
+        width: 44px;
+        height: 44px;
+        bottom: -12px;
+      }
+      .book-delete-btn {
+        width: 32px;
+        height: 32px;
+        right: 10px;
+        bottom: 9px;
+      }
+      .book-delete-btn .book-control-icon {
+        width: 14px;
+        height: 14px;
+      }
+    }
     @media (max-width: 430px) {
       .library-card { padding: 20px 18px 18px; }
       .library-actions-row { gap: 10px; }
