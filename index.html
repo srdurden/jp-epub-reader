@@ -2109,6 +2109,21 @@
       `;
     }
 
+    function speakNativeTts(text, options = {}) {
+      const content = String(text || '').trim();
+      if (!content || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(content);
+      const preferredLang = options.lang || 'ja-JP';
+      utterance.lang = preferredLang;
+      utterance.rate = Number(options.rate) || 1;
+      utterance.pitch = Number(options.pitch) || 1;
+      const voices = window.speechSynthesis.getVoices?.() || [];
+      const preferredVoice = voices.find((voice) => voice.lang?.toLowerCase().startsWith('ja'));
+      if (preferredVoice) utterance.voice = preferredVoice;
+      window.speechSynthesis.speak(utterance);
+    }
+
     async function renderReaderView() {
       if (!state.currentBook) return renderLibraryView();
       const app = $('#app');
@@ -2230,13 +2245,19 @@
       });
 
       if (state.readingMode === 'sentence') {
-        $('#playSentenceBtn')?.addEventListener('click', () => nextStep());
+        $('#playSentenceBtn')?.addEventListener('click', () => {
+          const currentSentence = getTokenizedSentence(state.currentBookId, state.currentSpineIndex, state.currentSentenceIndex)?.sentence
+            || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
+            || '';
+          speakNativeTts(currentSentence, { lang: 'ja-JP' });
+        });
         $('#translateSentenceBtn')?.addEventListener('click', () => alert('Traducción rápida: función placeholder para conectar con tu flujo actual.'));
         $('.sentence-box')?.addEventListener('click', async (e) => {
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
           if (!tokenEl) return;
           const token = getTokenFromElement(tokenEl);
           await openTokenPanel(token, { bookId: state.currentBookId });
+          speakNativeTts(token?.surface || token?.baseForm || '', { lang: 'ja-JP' });
         });
       }
     }
