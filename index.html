@@ -240,6 +240,41 @@
     }
     .library-headline {
       margin: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .library-headline-menu {
+      position: relative;
+      flex: 0 0 auto;
+      margin-top: 2px;
+    }
+    .library-menu-toggle {
+      width: 46px;
+      min-height: 46px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
+      color: var(--text);
+      font-size: 1.32rem;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 3px 10px rgba(108, 95, 144, 0.06);
+    }
+    .library-actions-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      min-width: 220px;
+      z-index: 8;
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, var(--surface-strong) 8%);
+      box-shadow: var(--shadow-soft);
     }
     .library-title {
       display: block;
@@ -1954,13 +1989,16 @@
         <div class="library-shell">
           <div class="library-card">
             <h1 class="library-headline">
+              <div class="library-headline-menu">
+                <button id="libraryMenuToggleBtn" class="library-menu-toggle" type="button" aria-expanded="false" aria-controls="libraryActionsMenu" title="Abrir menú">☰</button>
+                <div id="libraryActionsMenu" class="library-actions-menu hidden">
+                  <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
+                  <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
+                </div>
+              </div>
               <span class="library-title">JP Reader</span>
             </h1>
             <div class="library-toolbar">
-              <div class="library-actions-row">
-                <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
-                <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
-              </div>
               <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
               <input id="epubInput" class="hidden" type="file" accept=".epub,application/epub+zip" multiple />
               <div id="libraryThemeToggle" class="segmented-toggle" role="group" aria-label="Tema">
@@ -2056,10 +2094,37 @@
         await saveSettings({ theme: btn.dataset.themeOption });
         renderLibraryView();
       }));
-      $('#openVocabBtn').addEventListener('click', renderVocabularyView);
+      const libraryMenuToggleBtn = $('#libraryMenuToggleBtn');
+      const libraryActionsMenu = $('#libraryActionsMenu');
+      const closeLibraryMenu = () => {
+        libraryActionsMenu?.classList.add('hidden');
+        libraryMenuToggleBtn?.setAttribute('aria-expanded', 'false');
+      };
+      libraryMenuToggleBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = libraryActionsMenu?.classList.contains('hidden');
+        if (willOpen) {
+          libraryActionsMenu?.classList.remove('hidden');
+          libraryMenuToggleBtn?.setAttribute('aria-expanded', 'true');
+        } else {
+          closeLibraryMenu();
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if (!libraryActionsMenu || libraryActionsMenu.classList.contains('hidden')) return;
+        if (libraryActionsMenu.contains(e.target) || libraryMenuToggleBtn?.contains(e.target)) return;
+        closeLibraryMenu();
+      });
+      $('#openVocabBtn').addEventListener('click', () => {
+        closeLibraryMenu();
+        renderVocabularyView();
+      });
 
       app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
-      $('#importDictPackBtn').addEventListener('click', () => $('#dictPackInput')?.click());
+      $('#importDictPackBtn').addEventListener('click', () => {
+        closeLibraryMenu();
+        $('#dictPackInput')?.click();
+      });
       $('#dictPackInput').addEventListener('change', async (e) => {
         const files = [...(e.target.files || [])];
         if (!files.length) return;
