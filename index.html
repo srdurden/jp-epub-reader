@@ -330,6 +330,17 @@
       line-height: 1.12;
       letter-spacing: -0.03em;
     }
+    .book-title-btn {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .book-title-btn:hover { text-decoration: underline; }
     .book-author {
       margin: 0;
       color: var(--muted);
@@ -1976,7 +1987,11 @@
                   <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title || b.fileName)}" />` : `<div class="cover"></div>`}</div>
                 </button>
                 <div class="book-header">
-                  <h2 class="book-title">${escapeHtml(b.title || b.fileName)}</h2>
+                  <h2 class="book-title">
+                    <button class="book-title-btn" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
+                      ${escapeHtml(b.title || b.fileName)}
+                    </button>
+                  </h2>
                   <p class="book-author">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
                 </div>
                 <div class="book-progress-shell">
