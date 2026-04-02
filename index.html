@@ -758,7 +758,8 @@
         entry: null,
         draftLevel: null,
         dictionaryResult: null,
-        userDefinitionDraft: ''
+        userDefinitionDraft: '',
+        isEditingUserDefinition: false
       },
       vocabFilters: {
         query: '',
@@ -1440,7 +1441,7 @@
     // [NUEVO Fase 3] Token interaction + panel + familiarity rendering
     // =========================
     function closeTokenPanel() {
-      state.tokenSelection = { token: null, entry: null, draftLevel: null, dictionaryResult: null, userDefinitionDraft: '' };
+      state.tokenSelection = { token: null, entry: null, draftLevel: null, dictionaryResult: null, userDefinitionDraft: '', isEditingUserDefinition: false };
       const host = $('#tokenPanelHost');
       if (host) host.innerHTML = '';
       const readerContent = $('.reader-content');
@@ -1454,44 +1455,50 @@
     function renderTokenPanel() {
       const host = $('#tokenPanelHost');
       if (!host) return;
-      const { token, entry, draftLevel, dictionaryResult, userDefinitionDraft } = state.tokenSelection;
+      const { token, entry, draftLevel, dictionaryResult, userDefinitionDraft, isEditingUserDefinition } = state.tokenSelection;
       if (!token || !entry) {
         host.innerHTML = '';
         return;
       }
       const meanings = entry.meanings || dictionaryResult?.meanings || [];
       const firstDefinition = entry.userDefinition || entry.defaultDefinition || meanings[0] || 'Sin definición disponible.';
+      const hasUserDefinition = Boolean(entry.userDefinition);
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
           <div class="token-panel-handle" aria-hidden="true"></div>
           <div class="toolbar" style="margin-bottom: 8px; align-items: center;">
-            <h3>${escapeHtml(entry.surface || token.surface || '—')}</h3>
+            <h3>${escapeHtml(entry.surface || token.surface || '—')} <span class="hiragana">(${escapeHtml(entry.readingKana || '—')})</span></h3>
             <div class="spacer"></div>
-            <button id="deleteUserDefinitionBtn" class="icon-btn" title="Borrar definición personalizada">🗑</button>
-            <button id="closeTokenPanelBtn" class="icon-btn" title="Cerrar">✓</button>
+            <button id="markAsKnownBtn" class="icon-btn" title="Marcar como visto">✓</button>
           </div>
           <div class="token-grid">
-            <span class="v hiragana">${escapeHtml(entry.readingKana || '—')}</span>
             <span class="v">${escapeHtml(firstDefinition)}</span>
+            ${hasUserDefinition ? `<div class="v" style="display:flex; gap:8px; align-items:flex-start;"><span>${escapeHtml(entry.userDefinition)}</span><button id="editUserDefinitionBtn" class="icon-btn" title="Editar definición personalizada">✏️</button></div>` : ''}
           </div>
           <div class="level-picker" aria-label="Nivel de conocimiento">
             ${[1,2,3,4,5].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
-            <button class="level-btn ${draftLevel == null ? 'active' : ''}" data-level="">Sin valorar</button>
+            <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
           </div>
-          <div style="margin-top:8px;">
+          <div style="margin-top:8px; ${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
             <label for="userDefinitionInput"><strong>Definición personalizada</strong></label>
-            <textarea id="userDefinitionInput" placeholder="Escribe tu definición o nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
-            <div class="toolbar" style="margin-top:8px;">
-              <button id="saveUserDefinitionBtn" class="primary">Guardar</button>
-              <button id="appendSuggestedDefinitionBtn">Añadir sugerida</button>
+            <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:start;">
+              <textarea id="userDefinitionInput" placeholder="Escribe tu definición o nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
+              <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
             </div>
           </div>
         </aside>
       `;
       const readerContent = $('.reader-content');
       if (readerContent) readerContent.classList.add('with-panel');
-      $('#closeTokenPanelBtn')?.addEventListener('click', closeTokenPanel);
+      $('#markAsKnownBtn')?.addEventListener('click', async () => {
+        const updated = await setTokenFamiliarity(entry.vocabKey, 5);
+        if (!updated) return;
+        state.tokenSelection.entry = updated;
+        state.tokenSelection.draftLevel = updated.familiarityLevel;
+        applyFamiliarityStyles(updated.vocabKey, updated.familiarityLevel);
+        closeTokenPanel();
+      });
       host.querySelectorAll('[data-level]').forEach((btn) => btn.addEventListener('click', async () => {
         const rawLevel = btn.dataset.level;
         const level = rawLevel ? Number(rawLevel) : null;
@@ -1511,23 +1518,21 @@
         if (!updated) return;
         state.tokenSelection.entry = updated;
         state.tokenSelection.userDefinitionDraft = updated.userDefinition || '';
+        state.tokenSelection.isEditingUserDefinition = false;
         renderTokenPanel();
       });
-      $('#appendSuggestedDefinitionBtn')?.addEventListener('click', () => {
-        const suggested = entry.defaultDefinition || meanings[0] || '';
-        if (!suggested) return;
-        const input = $('#userDefinitionInput');
-        if (!input) return;
-        const prefix = (input.value || '').trim();
-        input.value = prefix ? `${prefix}\n${suggested}` : suggested;
-        state.tokenSelection.userDefinitionDraft = input.value;
-      });
-      $('#deleteUserDefinitionBtn')?.addEventListener('click', async () => {
-        const updated = await updateUserDefinition(entry.vocabKey, '');
-        if (!updated) return;
-        state.tokenSelection.entry = updated;
-        state.tokenSelection.userDefinitionDraft = '';
+      $('#editUserDefinitionBtn')?.addEventListener('click', () => {
+        state.tokenSelection.isEditingUserDefinition = true;
+        state.tokenSelection.userDefinitionDraft = entry.userDefinition || '';
         renderTokenPanel();
+      });
+      $('#removeVocabEntryBtn')?.addEventListener('click', async () => {
+        const existing = await loadVocabEntryByKey(entry.vocabKey);
+        if (!existing?.id) return;
+        await dbDelete(STORES.vocabEntries, existing.id);
+        state.vocabMap.delete(entry.vocabKey);
+        applyFamiliarityStyles(entry.vocabKey, null);
+        closeTokenPanel();
       });
       host.querySelector('[data-close-token-panel="1"]')?.addEventListener('click', closeTokenPanel);
     }
@@ -1557,7 +1562,8 @@
         entry,
         draftLevel: entry.familiarityLevel ?? null,
         dictionaryResult,
-        userDefinitionDraft: entry.userDefinition || ''
+        userDefinitionDraft: entry.userDefinition || '',
+        isEditingUserDefinition: false
       };
       renderTokenPanel();
       applyFamiliarityStyles(entry.vocabKey, entry.familiarityLevel);
