@@ -242,6 +242,7 @@
       margin: 0;
       display: flex;
       align-items: flex-start;
+      justify-content: space-between;
       gap: 10px;
     }
     .library-headline-menu {
@@ -265,7 +266,7 @@
     .library-actions-menu {
       position: absolute;
       top: calc(100% + 8px);
-      left: 0;
+      right: 0;
       min-width: 220px;
       z-index: 8;
       display: grid;
@@ -1975,6 +1976,18 @@
       state.books = await listBooks();
     }
 
+    async function refreshStaticResourcesCache() {
+      if (!('caches' in window)) throw new Error('Cache Storage no está disponible en este navegador.');
+      const cacheKeys = await caches.keys();
+      const staticCacheKeys = cacheKeys.filter((key) => key.startsWith('jp-epub-reader-'));
+      await Promise.all(staticCacheKeys.map((key) => caches.delete(key)));
+
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration('./sw.js') || await navigator.serviceWorker.getRegistration();
+        await registration?.update();
+      }
+    }
+
     function getBookProgress(bookId) {
       return dbGet(STORES.progress, bookId);
     }
@@ -1989,14 +2002,15 @@
         <div class="library-shell">
           <div class="library-card">
             <h1 class="library-headline">
+              <span class="library-title">JP Reader</span>
               <div class="library-headline-menu">
                 <button id="libraryMenuToggleBtn" class="library-menu-toggle" type="button" aria-expanded="false" aria-controls="libraryActionsMenu" title="Abrir menú">☰</button>
                 <div id="libraryActionsMenu" class="library-actions-menu hidden">
                   <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
                   <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
+                  <button id="refreshStaticCacheBtn" class="library-action-btn" title="Refrescar caché de recursos estáticos">Refrescar</button>
                 </div>
               </div>
-              <span class="library-title">JP Reader</span>
             </h1>
             <div class="library-toolbar">
               <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
@@ -2124,6 +2138,17 @@
       $('#importDictPackBtn').addEventListener('click', () => {
         closeLibraryMenu();
         $('#dictPackInput')?.click();
+      });
+      $('#refreshStaticCacheBtn').addEventListener('click', async () => {
+        closeLibraryMenu();
+        try {
+          await refreshStaticResourcesCache();
+          state.dictionaryStatus.importMessage = 'Caché de recursos estáticos refrescada.';
+        } catch (err) {
+          console.error(err);
+          state.dictionaryStatus.importMessage = `No se pudo refrescar la caché estática: ${err?.message || err}`;
+        }
+        renderLibraryView();
       });
       $('#dictPackInput').addEventListener('change', async (e) => {
         const files = [...(e.target.files || [])];
