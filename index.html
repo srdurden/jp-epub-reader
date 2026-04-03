@@ -154,15 +154,66 @@
       padding: 8px 4px 12px;
       background: transparent;
       line-height: 1.85;
+      font-size: var(--reader-font-size, 18px);
     }
     .reader-content iframe { width: 100%; min-height: 56vh; border: 0; }
-    .sentence-box { font-size: 1.35em; line-height: 1.9; white-space: pre-wrap; }
+    .sentence-box { font-size: 1em; line-height: 1.9; white-space: pre-wrap; }
     .page-mode-text {
-      font-size: 1.08em;
+      font-size: 1em;
       line-height: 1.95;
       white-space: pre-wrap;
     }
     .page-sentence { margin: 0 0 0.4em; }
+    .reader-status-strip {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .reader-status-title {
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+    .reader-status-subtitle {
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.25;
+    }
+    .reader-status-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .reader-status-chip {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 0.82rem;
+      line-height: 1.2;
+      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
+    }
+    .reader-page-frame {
+      min-height: var(--reader-page-height, calc(100vh - 250px));
+      padding: 0 2px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+    }
+    .reader-page-footer {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    #paginationMeasureHost {
+      position: fixed;
+      left: -99999px;
+      top: 0;
+      visibility: hidden;
+      pointer-events: none;
+      z-index: -1;
+      contain: layout style paint;
+    }
     .segmented-line {
       display: flex;
       flex-wrap: wrap;
@@ -857,6 +908,8 @@
       sections: [],
       sectionSentencesCache: new Map(),
       sentenceTokenCache: new Map(),
+      pageMapsCache: new Map(),
+      pageSummariesCache: new Map(),
       settings: { ...DEFAULT_SETTINGS },
       vocabMap: new Map(),
       vocabDataVersion: 0,
@@ -1431,20 +1484,186 @@
       return sentences.map((_, sentenceIndex) => getTokenizedSentence(bookId, sectionIndex, sentenceIndex));
     }
 
-    function renderTokenizedPageSection(bookId, sectionIndex, startSentenceIndex = 0) {
+    function getReaderPaginationContext() {
+      const readerCard = $('.reader-card');
+      const readerContent = $('.reader-content');
+      const widthFromDom = Math.max((readerContent?.clientWidth || 0) - 8, 0);
+      const widthFallback = Math.max(Math.min(window.innerWidth - 32, 720), 280);
+      const stickyHeight = readerCard ? readerCard.getBoundingClientRect().height : 190;
+      const pageHeight = Math.max(Math.round(window.innerHeight - stickyHeight - 42), 240);
+      return {
+        width: Math.round(widthFromDom || widthFallback),
+        pageHeight,
+        stickyHeight: Math.round(stickyHeight || 0)
+      };
+    }
+
+    function getPaginationSignature(context = getReaderPaginationContext()) {
+      return [
+        state.currentBookId || 'book',
+        state.settings.fontSize,
+        state.settings.showSegmentation ? 1 : 0,
+        context.width,
+        context.pageHeight
+      ].join('::');
+    }
+
+    function getPaginationCacheKey(sectionIndex, context = getReaderPaginationContext()) {
+      const section = state.sections[sectionIndex];
+      return `${getPaginationSignature(context)}::${section?.path || sectionIndex}`;
+    }
+
+    function getPaginationMeasureInner(context = getReaderPaginationContext()) {
+      let host = document.getElementById('paginationMeasureHost');
+      if (!host) {
+        host = document.createElement('div');
+        host.id = 'paginationMeasureHost';
+        document.body.appendChild(host);
+      }
+      host.style.width = `${context.width}px`;
+      host.innerHTML = `<div class="reader-content" style="width:${context.width}px;--reader-font-size:${state.settings.fontSize}px;"><div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text" id="paginationMeasureInner"></div></div></div>`;
+      return host.querySelector('#paginationMeasureInner');
+    }
+
+    function buildVirtualPageMap(sectionIndex, context = getReaderPaginationContext()) {
+      const tokenizedSentences = getTokenizedSection(state.currentBookId, sectionIndex);
+      if (!tokenizedSentences.length) {
+        return [{ startSentence: 0, endSentence: 0 }];
+      }
+
+      const inner = getPaginationMeasureInner(context);
+      const pages = [];
+      let pageStart = 0;
+
+      inner.innerHTML = '';
+      for (let sentenceIndex = 0; sentenceIndex < tokenizedSentences.length; sentenceIndex += 1) {
+        const paragraph = document.createElement('p');
+        paragraph.className = 'page-sentence';
+        paragraph.dataset.sentenceIndex = String(sentenceIndex);
+        paragraph.innerHTML = renderSegmentedSentence(tokenizedSentences[sentenceIndex], { segmented: state.settings.showSegmentation });
+        inner.appendChild(paragraph);
+
+        if (inner.scrollHeight > context.pageHeight && inner.childElementCount > 1) {
+          inner.removeChild(paragraph);
+          pages.push({ startSentence: pageStart, endSentence: sentenceIndex - 1 });
+          inner.innerHTML = '';
+          pageStart = sentenceIndex;
+          inner.appendChild(paragraph);
+        }
+      }
+
+      const lastSentenceIndex = tokenizedSentences.length - 1;
+      if (pageStart <= lastSentenceIndex) {
+        pages.push({ startSentence: pageStart, endSentence: lastSentenceIndex });
+      }
+
+      if (!pages.length) {
+        pages.push({ startSentence: 0, endSentence: lastSentenceIndex });
+      }
+      return pages;
+    }
+
+    function getPageMapForSection(sectionIndex, context = getReaderPaginationContext()) {
+      const cacheKey = getPaginationCacheKey(sectionIndex, context);
+      if (state.pageMapsCache.has(cacheKey)) return state.pageMapsCache.get(cacheKey);
+      const pageMap = buildVirtualPageMap(sectionIndex, context);
+      state.pageMapsCache.set(cacheKey, pageMap);
+      return pageMap;
+    }
+
+    function getPaginationSummary(context = getReaderPaginationContext()) {
+      const signature = getPaginationSignature(context);
+      if (state.pageSummariesCache.has(signature)) return state.pageSummariesCache.get(signature);
+      const sectionPageCounts = state.sections.map((_, sectionIndex) => getPageMapForSection(sectionIndex, context).length || 1);
+      const summary = {
+        signature,
+        sectionPageCounts,
+        totalPages: Math.max(sectionPageCounts.reduce((sum, count) => sum + count, 0), 1)
+      };
+      state.pageSummariesCache.set(signature, summary);
+      return summary;
+    }
+
+    function findPageIndexForSentence(pageMap, sentenceIndex) {
+      if (!pageMap?.length) return 0;
+      const safeSentenceIndex = Math.max(0, Number(sentenceIndex) || 0);
+      const found = pageMap.findIndex((page) => safeSentenceIndex >= page.startSentence && safeSentenceIndex <= page.endSentence);
+      if (found >= 0) return found;
+      if (safeSentenceIndex <= pageMap[0].startSentence) return 0;
+      return pageMap.length - 1;
+    }
+
+    function getCurrentVirtualPageInfo(context = getReaderPaginationContext()) {
+      const summary = getPaginationSummary(context);
+      const pageMap = getPageMapForSection(state.currentSpineIndex, context);
+      const sectionPageIndex = findPageIndexForSentence(pageMap, state.currentSentenceIndex);
+      const page = pageMap[sectionPageIndex] || { startSentence: 0, endSentence: 0 };
+      const pagesBefore = summary.sectionPageCounts.slice(0, state.currentSpineIndex).reduce((sum, count) => sum + count, 0);
+      return {
+        page,
+        pageMap,
+        sectionPageIndex,
+        sectionPageCurrent: sectionPageIndex + 1,
+        sectionPageTotal: Math.max(pageMap.length, 1),
+        globalPageIndex: pagesBefore + sectionPageIndex,
+        globalPageCurrent: pagesBefore + sectionPageIndex + 1,
+        globalPageTotal: summary.totalPages,
+        context
+      };
+    }
+
+    function locateGlobalPage(globalPageIndex, context = getReaderPaginationContext()) {
+      const summary = getPaginationSummary(context);
+      const targetIndex = Math.max(0, Math.min(Number(globalPageIndex) || 0, summary.totalPages - 1));
+      let cursor = 0;
+      for (let sectionIndex = 0; sectionIndex < state.sections.length; sectionIndex += 1) {
+        const count = summary.sectionPageCounts[sectionIndex] || 1;
+        if (targetIndex < cursor + count) {
+          const pageIndex = targetIndex - cursor;
+          const pageMap = getPageMapForSection(sectionIndex, context);
+          return {
+            sectionIndex,
+            pageIndex,
+            page: pageMap[Math.max(0, Math.min(pageIndex, pageMap.length - 1))] || { startSentence: 0, endSentence: 0 }
+          };
+        }
+        cursor += count;
+      }
+      const lastSectionIndex = Math.max(state.sections.length - 1, 0);
+      const lastPageMap = getPageMapForSection(lastSectionIndex, context);
+      return {
+        sectionIndex: lastSectionIndex,
+        pageIndex: Math.max(lastPageMap.length - 1, 0),
+        page: lastPageMap[Math.max(lastPageMap.length - 1, 0)] || { startSentence: 0, endSentence: 0 }
+      };
+    }
+
+    function goToGlobalPage(globalPageIndex, context = getReaderPaginationContext()) {
+      const location = locateGlobalPage(globalPageIndex, context);
+      state.currentSpineIndex = location.sectionIndex;
+      state.currentSentenceIndex = Math.max(0, location.page.startSentence || 0);
+    }
+
+    function renderTokenizedVirtualPageSection(bookId, sectionIndex, sentenceIndex = 0, context = getReaderPaginationContext()) {
       const tokenizedSentences = getTokenizedSection(bookId, sectionIndex);
       if (!tokenizedSentences.length) return '<p class="status">Sin texto legible en esta sección.</p>';
-      const safeStart = Math.max(0, Math.min(Number(startSentenceIndex) || 0, tokenizedSentences.length - 1));
-      return `<div class="page-mode-text">${tokenizedSentences.map((payload, sentenceIndex) => `<p class="page-sentence ${sentenceIndex === safeStart ? 'current-sentence' : ''}" data-sentence-index="${sentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`).join('')}</div>`;
+      const pageMap = getPageMapForSection(sectionIndex, context);
+      const pageIndex = findPageIndexForSentence(pageMap, sentenceIndex);
+      const page = pageMap[pageIndex] || { startSentence: 0, endSentence: tokenizedSentences.length - 1 };
+      const visible = tokenizedSentences.slice(page.startSentence, page.endSentence + 1);
+      return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${visible.map((payload, localSentenceIndex) => {
+        const absoluteSentenceIndex = page.startSentence + localSentenceIndex;
+        return `<p class="page-sentence ${absoluteSentenceIndex === sentenceIndex ? 'current-sentence' : ''}" data-sentence-index="${absoluteSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`;
+      }).join('')}</div><div class="reader-page-footer">Página ${pageIndex + 1} de ${Math.max(pageMap.length, 1)} en este capítulo.</div></div>`;
     }
 
     function alignPageModeToCurrentSentence() {
-      const target = document.querySelector(`.page-sentence[data-sentence-index="${state.currentSentenceIndex}"]`);
-      if (!target) return;
+      const readerContentWrap = $('.reader-content-wrap');
+      if (!readerContentWrap) return;
       const stickyHeader = $('.reader-card');
       const stickyHeight = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0;
       const topPadding = 10;
-      const targetTop = window.scrollY + target.getBoundingClientRect().top - stickyHeight - topPadding;
+      const targetTop = window.scrollY + readerContentWrap.getBoundingClientRect().top - stickyHeight - topPadding;
       window.scrollTo({ top: Math.max(0, targetTop), behavior: 'auto' });
     }
 
@@ -2260,6 +2479,8 @@
       state.currentSentenceIndex = progress?.currentSentenceIndex || 0;
       state.sectionSentencesCache.clear();
       state.sentenceTokenCache.clear();
+      state.pageMapsCache.clear();
+      state.pageSummariesCache.clear();
 
       await dbPut(STORES.books, { ...book, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       await saveSettings({ lastOpenedBookId: bookId });
@@ -2270,12 +2491,17 @@
 
     async function persistCurrentProgress() {
       if (!state.currentBookId) return;
-      const percent = ((state.currentSpineIndex + 1) / Math.max(state.sections.length, 1)) * 100;
+      const pageInfo = getCurrentVirtualPageInfo();
+      const percent = (pageInfo.globalPageCurrent / Math.max(pageInfo.globalPageTotal, 1)) * 100;
       await saveReadingProgress(state.currentBookId, {
         readingMode: state.readingMode,
         currentLocation: state.sections[state.currentSpineIndex]?.path || null,
         currentSectionIndex: state.currentSpineIndex,
         currentSentenceIndex: state.currentSentenceIndex,
+        currentGlobalPageIndex: Math.max(pageInfo.globalPageCurrent - 1, 0),
+        totalPages: pageInfo.globalPageTotal,
+        currentSectionPageIndex: Math.max(pageInfo.sectionPageCurrent - 1, 0),
+        sectionPageTotal: pageInfo.sectionPageTotal,
         percent: Number(percent.toFixed(2))
       });
     }
@@ -2293,9 +2519,9 @@
     async function nextStep() {
       closeTokenPanel();
       if (state.readingMode === 'page') {
-        if (state.currentSpineIndex < state.sections.length - 1) {
-          state.currentSpineIndex++;
-          state.currentSentenceIndex = 0;
+        const pageInfo = getCurrentVirtualPageInfo();
+        if (pageInfo.globalPageCurrent < pageInfo.globalPageTotal) {
+          goToGlobalPage(pageInfo.globalPageIndex + 1, pageInfo.context);
         }
       } else {
         const sents = getSentencesForSection(state.sections[state.currentSpineIndex]);
@@ -2312,9 +2538,9 @@
     async function prevStep() {
       closeTokenPanel();
       if (state.readingMode === 'page') {
-        if (state.currentSpineIndex > 0) {
-          state.currentSpineIndex--;
-          state.currentSentenceIndex = 0;
+        const pageInfo = getCurrentVirtualPageInfo();
+        if (pageInfo.globalPageCurrent > 1) {
+          goToGlobalPage(pageInfo.globalPageIndex - 1, pageInfo.context);
         }
       } else {
         if (state.currentSentenceIndex > 0) state.currentSentenceIndex--;
@@ -2651,10 +2877,9 @@
             const percent = pg?.percent != null ? `${pg.percent}%` : '0%';
             const sectionTotal = Math.max(b.sectionCount || ((pg?.currentSectionIndex ?? 0) + 1), 1);
             const sectionCurrent = Math.min((pg?.currentSectionIndex ?? 0) + 1, sectionTotal);
-            const sentenceCurrent = Math.max((pg?.currentSentenceIndex ?? 0) + 1, 1);
-            const rightLabel = pg?.readingMode === 'sentence'
-              ? `${sectionCurrent}/${sectionTotal} | ${sentenceCurrent}/${sentenceCurrent}`
-              : `${sectionCurrent}/${sectionTotal} | 1/1`;
+            const currentPage = Math.max((pg?.currentGlobalPageIndex ?? 0) + 1, 1);
+            const totalPages = Math.max(pg?.totalPages || currentPage, 1);
+            const rightLabel = `Cap ${sectionCurrent}/${sectionTotal} · Pág ${currentPage}/${totalPages}`;
             return `
               <article class="book-tile">
                 <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
@@ -2796,10 +3021,10 @@
       }));
     }
 
-    function renderPageMode(section, sectionIndex) {
+    function renderPageMode(section, sectionIndex, paginationContext = getReaderPaginationContext()) {
       return `
         <div id="tokenPanelHost"></div>
-        ${renderTokenizedPageSection(state.currentBookId, sectionIndex, state.currentSentenceIndex)}
+        ${renderTokenizedVirtualPageSection(state.currentBookId, sectionIndex, state.currentSentenceIndex, paginationContext)}
       `;
     }
 
@@ -2843,12 +3068,14 @@
       if (!state.currentBook) return renderLibraryView();
       const app = $('#app');
       const section = state.sections[state.currentSpineIndex];
-      const percent = Math.round(((state.currentSpineIndex + 1) / state.sections.length) * 100);
       const sectionSentences = getSentencesForSection(section);
       const sentenceCurrent = Math.min(Math.max(state.currentSentenceIndex + 1, 1), Math.max(sectionSentences.length, 1));
       const sentenceTotal = Math.max(sectionSentences.length, 1);
       const chapterCurrent = Math.min(state.currentSpineIndex + 1, Math.max(state.sections.length, 1));
       const chapterTotal = Math.max(state.sections.length, 1);
+      const initialContext = getReaderPaginationContext();
+      const pageInfo = getCurrentVirtualPageInfo(initialContext);
+      const percent = Math.round((pageInfo.globalPageCurrent / Math.max(pageInfo.globalPageTotal, 1)) * 100);
 
       app.innerHTML = `
         <div class="reader-shell">
@@ -2860,14 +3087,22 @@
               <button id="toggleModeBtn" title="Frase/Página" aria-label="Frase/Página">⇄<span>Frase/Página</span></button>
               <button id="openReaderMenuBtn" title="Menú" aria-label="Menú">☰<span>Menú</span></button>
             </div>
-            <div id="readerMenu" class="toolbar hidden">
-              <div class="reader-headline">
-                <strong>${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</strong>
-                <span class="status">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</span>
-                <span class="status">Progreso aprox.: ${percent}%${state.readingMode === 'sentence' ? ` · ${sentenceCurrent} / ${sentenceTotal} | ${chapterCurrent} / ${chapterTotal}` : ''}</span>
+            <div class="reader-status-strip">
+              <div class="reader-status-title">${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</div>
+              <div class="reader-status-subtitle">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</div>
+              <div class="reader-status-metrics">
+                <span class="reader-status-chip">${percent}%</span>
+                <span class="reader-status-chip">Pág ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</span>
+                <span class="reader-status-chip">Cap ${chapterCurrent}/${chapterTotal}</span>
+                <span class="reader-status-chip">Frase ${sentenceCurrent}/${sentenceTotal}</span>
+                <span class="reader-status-chip">Modo ${state.readingMode === 'page' ? 'Página' : 'Frase'}</span>
               </div>
+            </div>
+            <div id="readerMenu" class="toolbar hidden">
               <div class="reader-progress">
-                <input id="sectionProgress" type="range" min="0" max="${Math.max(state.sections.length - 1, 0)}" value="${state.currentSpineIndex}" />
+                <label for="pageProgress">Página global</label>
+                <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
+                <div class="status">${pageInfo.globalPageCurrent} / ${pageInfo.globalPageTotal} · progreso real por páginas virtuales</div>
               </div>
               <button id="openVocabReaderBtn">Vocabulario</button>
               <label>Modo
@@ -2897,7 +3132,7 @@
             </div>
           </div>
           <div class="reader-content-wrap">
-            <div class="reader-content">${state.readingMode === 'page' ? renderPageMode(section, state.currentSpineIndex) : renderSentenceMode(section)}</div>
+            <div class="reader-content" style="--reader-font-size:${state.settings.fontSize}px;">${state.readingMode === 'page' ? renderPageMode(section, state.currentSpineIndex, initialContext) : renderSentenceMode(section)}</div>
           </div>
         </div>
       `;
@@ -2912,9 +3147,8 @@
         renderLibraryView();
       });
       $('#openReaderMenuBtn').addEventListener('click', () => $('#readerMenu')?.classList.toggle('hidden'));
-      $('#sectionProgress').addEventListener('input', async (e) => {
-        state.currentSpineIndex = Number(e.target.value);
-        state.currentSentenceIndex = 0;
+      $('#pageProgress').addEventListener('change', async (e) => {
+        goToGlobalPage(Number(e.target.value));
         await persistCurrentProgress();
         renderReaderView();
       });
@@ -2938,10 +3172,14 @@
       app.querySelectorAll('#readerThemeToggle [data-theme-option]').forEach((btn) => btn.addEventListener('click', async () => {
         await saveSettings({ theme: btn.dataset.themeOption });
         renderReaderView();
+        await persistCurrentProgress();
       }));
       $('#segmentationToggle').addEventListener('change', async (e) => {
         await saveSettings({ showSegmentation: e.target.checked });
+        state.pageMapsCache.clear();
+        state.pageSummariesCache.clear();
         renderReaderView();
+        await persistCurrentProgress();
       });
       $('#tokenDebugToggle').addEventListener('change', async (e) => {
         await saveSettings({ tokenDebug: e.target.checked });
@@ -2949,7 +3187,10 @@
       });
       $('#fontSize').addEventListener('input', async (e) => {
         await saveSettings({ fontSize: Number(e.target.value) });
+        state.pageMapsCache.clear();
+        state.pageSummariesCache.clear();
         renderReaderView();
+        await persistCurrentProgress();
       });
 
       if (state.readingMode === 'page') {
@@ -3051,6 +3292,19 @@ self.addEventListener('fetch', (event) => {
     // =========================
     // Inicialización
     // =========================
+    let readerResizeDebounce = null;
+    window.addEventListener('resize', () => {
+      if (state.route !== 'reader') return;
+      clearTimeout(readerResizeDebounce);
+      readerResizeDebounce = setTimeout(async () => {
+        closeTokenPanel();
+        state.pageMapsCache.clear();
+        state.pageSummariesCache.clear();
+        renderReaderView();
+        await persistCurrentProgress();
+      }, 140);
+    });
+
     (async function init() {
       await loadSettings();
       await ensureEmbeddedFallbackDictionary();
