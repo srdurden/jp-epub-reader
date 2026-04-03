@@ -139,11 +139,27 @@
       grid-template-columns: 1fr;
       align-items: center;
       gap: 10px;
+      margin: 6px 0 2px;
     }
     .reader-progress input[type="range"] {
       width: 100%;
       padding: 0;
       accent-color: #16a34a;
+    }
+    .reader-menu {
+      display: grid;
+      gap: 12px;
+      padding-top: 8px;
+      margin-top: 4px;
+    }
+    .reader-menu-section {
+      display: grid;
+      gap: 8px;
+    }
+    .reader-menu-divider {
+      height: 1px;
+      background: color-mix(in srgb, var(--border) 70%, #f3f4f6 30%);
+      border-radius: 999px;
     }
     .reader-content-wrap { position: relative; }
     .reader-content {
@@ -3117,14 +3133,16 @@
               <button id="openReaderMenuBtn" title="Menú" aria-label="Menú">☰<span>Menú</span></button>
             </div>
             <div class="reader-progress">
-              <label for="pageProgress">Página global</label>
               <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
             </div>
-            <div id="readerMenu" class="toolbar hidden">
-              <label>Capítulo
-                <select id="sectionSelect">${state.sections.map((s, i) => `<option value="${i}">${i+1}. ${escapeHtml(s.title)}</option>`).join('')}</select>
-              </label>
-              <div class="reader-status-strip">
+            <div id="readerMenu" class="toolbar reader-menu hidden">
+              <div class="reader-menu-section">
+                <label>Capítulo
+                  <select id="sectionSelect">${state.sections.map((s, i) => `<option value="${i}">${i+1}. ${escapeHtml(s.title)}</option>`).join('')}</select>
+                </label>
+              </div>
+              <div class="reader-menu-divider" aria-hidden="true"></div>
+              <div class="reader-menu-section reader-status-strip">
                 <div class="reader-status-title">${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</div>
                 <div class="reader-status-subtitle">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</div>
                 <div class="reader-status-metrics">
@@ -3134,9 +3152,12 @@
                   <span class="reader-status-chip">Frase ${sentenceCurrent}/${sentenceTotal}</span>
                 </div>
               </div>
-              <label>Fuente
-                <input id="fontSize" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
-              </label>
+              <div class="reader-menu-divider" aria-hidden="true"></div>
+              <div class="reader-menu-section">
+                <label>aA
+                  <input id="fontSize" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
+                </label>
+              </div>
             </div>
           </div>
           <div class="reader-content-wrap">
