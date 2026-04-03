@@ -3116,7 +3116,14 @@
               <button id="toggleModeBtn" title="Frase/Página" aria-label="Frase/Página">⇄<span>Frase/Página</span></button>
               <button id="openReaderMenuBtn" title="Menú" aria-label="Menú">☰<span>Menú</span></button>
             </div>
+            <div class="reader-progress">
+              <label for="pageProgress">Página global</label>
+              <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
+            </div>
             <div id="readerMenu" class="toolbar hidden">
+              <label>Capítulo
+                <select id="sectionSelect">${state.sections.map((s, i) => `<option value="${i}">${i+1}. ${escapeHtml(s.title)}</option>`).join('')}</select>
+              </label>
               <div class="reader-status-strip">
                 <div class="reader-status-title">${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</div>
                 <div class="reader-status-subtitle">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</div>
@@ -3125,34 +3132,6 @@
                   <span class="reader-status-chip">Pág ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</span>
                   <span class="reader-status-chip">Cap ${chapterCurrent}/${chapterTotal}</span>
                   <span class="reader-status-chip">Frase ${sentenceCurrent}/${sentenceTotal}</span>
-                  <span class="reader-status-chip">Modo ${state.readingMode === 'page' ? 'Página' : 'Frase'}</span>
-                </div>
-              </div>
-              <div class="reader-progress">
-                <label for="pageProgress">Página global</label>
-                <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
-                <div class="status">${pageInfo.globalPageCurrent} / ${pageInfo.globalPageTotal} · progreso real por páginas virtuales</div>
-              </div>
-              <button id="openVocabReaderBtn">Vocabulario</button>
-              <label>Modo
-                <select id="modeSelect"><option value="page">Página</option><option value="sentence">Frase</option></select>
-              </label>
-              <label>Capítulo
-                <select id="sectionSelect">${state.sections.map((s, i) => `<option value="${i}">${i+1}. ${escapeHtml(s.title)}</option>`).join('')}</select>
-              </label>
-              <label title="Muestra los tokens visualmente en modo frase">
-                <input id="segmentationToggle" type="checkbox" ${state.settings.showSegmentation ? 'checked' : ''} />
-                Mostrar segmentación
-              </label>
-              <label title="Muestra metadatos básicos de token (depuración)">
-                <input id="tokenDebugToggle" type="checkbox" ${state.settings.tokenDebug ? 'checked' : ''} />
-                Debug tokens
-              </label>
-              <div>
-                <span class="meta">Tema</span><br />
-                <div id="readerThemeToggle" class="segmented-toggle" role="group" aria-label="Tema">
-                  <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}">Claro</button>
-                  <button type="button" data-theme-option="dark" class="${state.settings.theme === 'dark' ? 'active' : ''}">Oscuro</button>
                 </div>
               </div>
               <label>Fuente
@@ -3166,7 +3145,6 @@
         </div>
       `;
 
-      $('#modeSelect').value = state.readingMode;
       $('#sectionSelect').value = String(state.currentSpineIndex);
 
       $('#readerExitBtn').addEventListener('click', async () => {
@@ -3181,37 +3159,16 @@
         await persistCurrentProgress();
         renderReaderView();
       });
-      $('#openVocabReaderBtn').addEventListener('click', async () => {
-        await persistCurrentProgress();
-        renderVocabularyView();
-      });
       $('#prevBtn').addEventListener('click', prevStep);
       $('#nextBtn').addEventListener('click', nextStep);
       $('#toggleModeBtn').addEventListener('click', () => {
         const targetMode = state.readingMode === 'page' ? 'sentence' : 'page';
         setReadingMode(targetMode);
       });
-      $('#modeSelect').addEventListener('change', (e) => setReadingMode(e.target.value));
       $('#sectionSelect').addEventListener('change', async (e) => {
         state.currentSpineIndex = Number(e.target.value);
         state.currentSentenceIndex = 0;
         await persistCurrentProgress();
-        renderReaderView();
-      });
-      app.querySelectorAll('#readerThemeToggle [data-theme-option]').forEach((btn) => btn.addEventListener('click', async () => {
-        await saveSettings({ theme: btn.dataset.themeOption });
-        renderReaderView();
-        await persistCurrentProgress();
-      }));
-      $('#segmentationToggle').addEventListener('change', async (e) => {
-        await saveSettings({ showSegmentation: e.target.checked });
-        state.pageMapsCache.clear();
-        state.pageSummariesCache.clear();
-        renderReaderView();
-        await persistCurrentProgress();
-      });
-      $('#tokenDebugToggle').addEventListener('change', async (e) => {
-        await saveSettings({ tokenDebug: e.target.checked });
         renderReaderView();
       });
       $('#fontSize').addEventListener('input', async (e) => {
