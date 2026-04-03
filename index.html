@@ -1593,12 +1593,13 @@
       return pageMap.length - 1;
     }
 
-    function getCurrentVirtualPageInfo(context = getReaderPaginationContext()) {
+    function getVirtualPageInfoForLocation(sectionIndex, sentenceIndex, context = getReaderPaginationContext()) {
       const summary = getPaginationSummary(context);
-      const pageMap = getPageMapForSection(state.currentSpineIndex, context);
-      const sectionPageIndex = findPageIndexForSentence(pageMap, state.currentSentenceIndex);
+      const safeSectionIndex = Math.max(0, Math.min(Number(sectionIndex) || 0, Math.max(state.sections.length - 1, 0)));
+      const pageMap = getPageMapForSection(safeSectionIndex, context);
+      const sectionPageIndex = findPageIndexForSentence(pageMap, sentenceIndex);
       const page = pageMap[sectionPageIndex] || { startSentence: 0, endSentence: 0 };
-      const pagesBefore = summary.sectionPageCounts.slice(0, state.currentSpineIndex).reduce((sum, count) => sum + count, 0);
+      const pagesBefore = summary.sectionPageCounts.slice(0, safeSectionIndex).reduce((sum, count) => sum + count, 0);
       return {
         page,
         pageMap,
@@ -1610,6 +1611,10 @@
         globalPageTotal: summary.totalPages,
         context
       };
+    }
+
+    function getCurrentVirtualPageInfo(context = getReaderPaginationContext()) {
+      return getVirtualPageInfoForLocation(state.currentSpineIndex, state.currentSentenceIndex, context);
     }
 
     function locateGlobalPage(globalPageIndex, context = getReaderPaginationContext()) {
@@ -1650,11 +1655,14 @@
       const pageMap = getPageMapForSection(sectionIndex, context);
       const pageIndex = findPageIndexForSentence(pageMap, sentenceIndex);
       const page = pageMap[pageIndex] || { startSentence: 0, endSentence: tokenizedSentences.length - 1 };
+      const footerPageInfo = getVirtualPageInfoForLocation(sectionIndex, sentenceIndex, context);
+      const chapterCurrent = Math.min(sectionIndex + 1, Math.max(state.sections.length, 1));
+      const chapterTotal = Math.max(state.sections.length, 1);
       const visible = tokenizedSentences.slice(page.startSentence, page.endSentence + 1);
       return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${visible.map((payload, localSentenceIndex) => {
         const absoluteSentenceIndex = page.startSentence + localSentenceIndex;
         return `<p class="page-sentence ${absoluteSentenceIndex === sentenceIndex ? 'current-sentence' : ''}" data-sentence-index="${absoluteSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`;
-      }).join('')}</div><div class="reader-page-footer">Página ${pageIndex + 1} de ${Math.max(pageMap.length, 1)} en este capítulo.</div></div>`;
+      }).join('')}</div><div class="reader-page-footer">Pg ${footerPageInfo.globalPageCurrent}/${footerPageInfo.globalPageTotal} - Cap ${chapterCurrent}/${chapterTotal}</div></div>`;
     }
 
     function alignPageModeToCurrentSentence() {
@@ -3087,18 +3095,18 @@
               <button id="toggleModeBtn" title="Frase/Página" aria-label="Frase/Página">⇄<span>Frase/Página</span></button>
               <button id="openReaderMenuBtn" title="Menú" aria-label="Menú">☰<span>Menú</span></button>
             </div>
-            <div class="reader-status-strip">
-              <div class="reader-status-title">${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</div>
-              <div class="reader-status-subtitle">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</div>
-              <div class="reader-status-metrics">
-                <span class="reader-status-chip">${percent}%</span>
-                <span class="reader-status-chip">Pág ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</span>
-                <span class="reader-status-chip">Cap ${chapterCurrent}/${chapterTotal}</span>
-                <span class="reader-status-chip">Frase ${sentenceCurrent}/${sentenceTotal}</span>
-                <span class="reader-status-chip">Modo ${state.readingMode === 'page' ? 'Página' : 'Frase'}</span>
-              </div>
-            </div>
             <div id="readerMenu" class="toolbar hidden">
+              <div class="reader-status-strip">
+                <div class="reader-status-title">${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</div>
+                <div class="reader-status-subtitle">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</div>
+                <div class="reader-status-metrics">
+                  <span class="reader-status-chip">${percent}%</span>
+                  <span class="reader-status-chip">Pág ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</span>
+                  <span class="reader-status-chip">Cap ${chapterCurrent}/${chapterTotal}</span>
+                  <span class="reader-status-chip">Frase ${sentenceCurrent}/${sentenceTotal}</span>
+                  <span class="reader-status-chip">Modo ${state.readingMode === 'page' ? 'Página' : 'Frase'}</span>
+                </div>
+              </div>
               <div class="reader-progress">
                 <label for="pageProgress">Página global</label>
                 <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
