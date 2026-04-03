@@ -1336,8 +1336,11 @@
         .filter(Boolean);
 
       blocks.forEach((block) => {
-        const withBreaks = block
-          .replace(/\n+/g, '\n')
+        const paragraph = block
+          .replace(/\n+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const withBreaks = paragraph
           .replace(/([。！？!?])\s*/g, '$1\n');
         withBreaks
           .split('\n')
