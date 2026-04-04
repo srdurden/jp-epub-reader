@@ -3219,7 +3219,6 @@
       const highlightSentenceIndex = options.preview ? null : safeLocation.sentenceIndex;
       return `
         <div class="${wrapperClass}" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">
-          ${options.preview ? '' : '<div id="tokenPanelHost"></div>'}
           ${renderTokenizedVirtualPage(state.currentBookId, safeLocation.sectionIndex, safeLocation.sentenceIndex, paginationContext, { activeSentenceIndex: highlightSentenceIndex })}
         </div>
       `;
@@ -3244,7 +3243,6 @@
             <div class="sentence-hero">
               <button id="playSentenceBtn" class="play-main" title="Reproducir oración">▶</button>
             </div>
-            <div id="tokenPanelHost"></div>
           `}
           <div class="sentence-box">${sentenceHtml}</div>
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
@@ -3346,6 +3344,7 @@
             ${renderReaderCarousel(initialContext)}
           </div>
         </div>
+        <div id="tokenPanelHost"></div>
       `;
 
       $('#readerExitBtn').addEventListener('click', async () => {
