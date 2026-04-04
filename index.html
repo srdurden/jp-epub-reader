@@ -187,8 +187,11 @@
     }
     .reader-carousel-panel {
       flex: 0 0 100%;
-      min-width: 100%;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       padding: 0 4px;
+      overflow: hidden;
     }
     .reader-carousel-panel[data-panel-role="prev"],
     .reader-carousel-panel[data-panel-role="next"] {
@@ -204,6 +207,9 @@
       background: transparent;
       line-height: 1.85;
       font-size: var(--reader-font-size, 18px);
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
     }
     .reader-content iframe,
     .reader-preview-content iframe { width: 100%; min-height: 56vh; border: 0; }
@@ -224,13 +230,31 @@
     .sentence-hero-preview {
       min-height: 122px;
     }
-    .sentence-box { font-size: 1em; line-height: 1.9; white-space: pre-wrap; }
+    .sentence-box {
+      font-size: 1em;
+      line-height: 1.9;
+      white-space: pre-wrap;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     .page-mode-text {
       font-size: 1em;
       line-height: 1.95;
       white-space: pre-wrap;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
-    .page-sentence { margin: 0 0 0.4em; }
+    .page-sentence {
+      margin: 0 0 0.4em;
+      max-width: 100%;
+      min-width: 0;
+    }
     .reader-status-strip {
       display: grid;
       gap: 6px;
@@ -286,6 +310,10 @@
       flex-wrap: wrap;
       gap: 0.12em;
       align-items: baseline;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
     }
     .segmented-line.compact { gap: 0; }
     .token {
