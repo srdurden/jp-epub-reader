@@ -44,6 +44,10 @@
       color: var(--text);
       font-size: 16px;
     }
+    body.reader-sentence-lock {
+      overflow: hidden;
+      height: 100vh;
+    }
     .app {
       max-width: 760px;
       margin: 0 auto;
@@ -329,7 +333,14 @@
     .token.jp.known-level-5 { border-bottom-color: transparent; background: transparent; }
     .token.punct { opacity: 0.9; }
     .segmented-line.compact .token { border-bottom-color: transparent; }
-    .token.known-level-1, .token.known-level-2, .token.known-level-3, .token.known-level-4 { border-bottom-color: transparent; background: #fef08a; }
+    .token.known-level-1 { border-bottom-color: transparent; background: #fef08a; }
+    .token.known-level-2 {
+      border-bottom-color: currentColor;
+      border-bottom-width: 2px;
+      background: transparent;
+    }
+    .token.known-level-3 { border-bottom-color: transparent; background: transparent; }
+    .token.known-level-4 { border-bottom-color: transparent; background: transparent; }
     .token.known-level-5 { border-bottom-color: transparent; background: transparent; }
     [data-theme="dark"] .token.jp.unknown-word {
       background: #d1d5db;
@@ -337,9 +348,7 @@
     }
     [data-theme="dark"] .token.jp.known-learning,
     [data-theme="dark"] .token.known-level-1,
-    [data-theme="dark"] .token.known-level-2,
-    [data-theme="dark"] .token.known-level-3,
-    [data-theme="dark"] .token.known-level-4 {
+    [data-theme="dark"] .token.known-level-2 {
       color: #111827;
     }
     .reader-content.with-panel { position: relative; }
@@ -415,6 +424,17 @@
       border-radius: 10px;
       padding: 6px 8px;
       font-size: 0.95rem;
+    }
+    #userDefinitionInput {
+      min-height: 2.3em;
+      height: 2.3em;
+      resize: both;
+      overflow: auto;
+    }
+    #saveUserDefinitionBtn {
+      background: #fff;
+      color: #000;
+      border-color: var(--border);
     }
     .chatgpt-btn {
       width: fit-content;
@@ -1797,8 +1817,9 @@
       const debug = `${token.pos}${token.baseForm ? ` · ${token.baseForm}` : ''}`;
       const interactive = isInteractiveToken(token);
       const identity = interactive ? getTokenIdentity(token) : null;
-      const knownLevel = identity ? state.vocabMap.get(identity.vocabKey)?.familiarityLevel : null;
-      const learningClass = knownLevel >= 1 && knownLevel <= 4 ? 'known-learning' : '';
+      const storedLevel = identity ? state.vocabMap.get(identity.vocabKey)?.familiarityLevel : null;
+      const knownLevel = getEffectiveFamiliarityLevel(storedLevel);
+      const learningClass = knownLevel === 1 ? 'known-learning' : '';
       const unknownClass = interactive && !knownLevel ? 'unknown-word' : '';
       return [
         `class="token ${token.isJapanese ? 'jp' : ''} ${token.pos === 'punct' ? 'punct' : ''} ${interactive ? 'clickable' : ''} ${learningClass} ${unknownClass} ${knownLevel ? `known-level-${knownLevel}` : ''} ${state.settings.tokenDebug ? 'dbg' : ''}"`,
@@ -1920,6 +1941,13 @@
       return next;
     }
 
+    function getEffectiveFamiliarityLevel(level) {
+      const numericLevel = Number(level);
+      if (!Number.isFinite(numericLevel) || numericLevel <= 0) return null;
+      if (numericLevel > 3) return 5;
+      return numericLevel;
+    }
+
     // =========================
     // [NUEVO Fase 3] Token interaction + panel + familiarity rendering
     // =========================
@@ -1967,17 +1995,17 @@
             ${hasUserDefinition ? `
               <div class="v custom-definition-row">
                 <span class="custom-definition-actions">
-                  <button id="editUserDefinitionBtn" class="icon-btn" title="Editar definición personalizada">✎</button>
-                  <button id="deleteUserDefinitionBtn" class="icon-btn" title="Borrar definición personalizada">🗑</button>
+                  <button id="editUserDefinitionBtn" class="icon-btn" title="Editar nota personal">✎</button>
+                  <button id="deleteUserDefinitionBtn" class="icon-btn" title="Borrar nota personal">🗑</button>
                 </span>
                 <span>${escapeHtml(entry.userDefinition)}</span>
               </div>
             ` : ''}
           </div>
           <div style="margin-top:8px; ${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
-            <label for="userDefinitionInput"><strong>Definición personalizada</strong></label>
+            <label for="userDefinitionInput"><strong>Nota personal</strong></label>
             <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:start;">
-              <textarea id="userDefinitionInput" placeholder="Escribe tu definición o nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
+              <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
               <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
             </div>
           </div>
@@ -1987,7 +2015,7 @@
           </div>
           <footer class="token-panel-footer">
             <div class="level-picker" aria-label="Nivel de conocimiento">
-              ${[1,2,3,4,5].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
+              ${[1,2,3].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
               <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
             </div>
           </footer>
@@ -2067,9 +2095,10 @@
       document.querySelectorAll(`[data-vocab-key="${CSS.escape(vocabKey)}"]`).forEach((node) => {
         for (let i = 1; i <= 5; i++) node.classList.remove(`known-level-${i}`);
         node.classList.remove('known-learning', 'unknown-word');
-        if (level >= 1 && level <= 4) node.classList.add('known-learning');
-        if (!level) node.classList.add('unknown-word');
-        if (level) node.classList.add(`known-level-${level}`);
+        const effectiveLevel = getEffectiveFamiliarityLevel(level);
+        if (effectiveLevel === 1) node.classList.add('known-learning');
+        if (!effectiveLevel) node.classList.add('unknown-word');
+        if (effectiveLevel) node.classList.add(`known-level-${effectiveLevel}`);
       });
     }
 
@@ -2680,9 +2709,10 @@
     function filterVocabularyEntries(entries, query, levelFilter) {
       const q = (query || '').trim().toLowerCase();
       return entries.filter((entry) => {
+        const effectiveLevel = getEffectiveFamiliarityLevel(entry.familiarityLevel);
         const levelOk = levelFilter === 'all'
           ? true
-          : String(entry.familiarityLevel ?? 'none') === String(levelFilter);
+          : String(effectiveLevel ?? 'none') === String(levelFilter);
         if (!levelOk) return false;
         if (!q) return true;
         const haystack = [entry.surface, entry.lemma, entry.reading, entry.readingKana, entry.readingRomaji, entry.defaultDefinition, entry.userDefinition, entry.normalizedKey].filter(Boolean).join(' ').toLowerCase();
@@ -2716,6 +2746,7 @@
 
     function renderVocabularyEntriesChunk(entries) {
       return entries.map((entry) => {
+        const effectiveLevel = getEffectiveFamiliarityLevel(entry.familiarityLevel);
         const draftNote = state.vocabView.pendingNotes.has(entry.vocabKey)
           ? state.vocabView.pendingNotes.get(entry.vocabKey)
           : (entry.userDefinition || '');
@@ -2726,7 +2757,7 @@
             <div class="vocab-main">
               <strong style="font-size:1.2rem;">${escapeHtml(entry.surface || entry.lemma || entry.vocabKey)}</strong>
               ${entry.readingKana ? `<span class="badge">${escapeHtml(entry.readingKana)}</span>` : ''}
-              <span class="badge level">Nivel ${escapeHtml(String(entry.familiarityLevel ?? '—'))}</span>
+              <span class="badge level">Nivel ${escapeHtml(String(effectiveLevel ?? '—'))}</span>
             </div>
             <p class="vocab-translation"><strong>Diccionario:</strong> ${escapeHtml(entry.defaultDefinition || '-')}</p>
             <div class="vocab-custom-definition">
@@ -2737,8 +2768,8 @@
               <span class="vocab-custom-definition-text">${escapeHtml(customDefinitionText)}</span>
             </div>
             <div class="level-picker">
-              ${[1,2,3,4,5].map((lvl) => `
-                <button type="button" class="level-btn ${Number(entry.familiarityLevel) === lvl ? 'active' : ''}" data-vocab-level="${lvl}" data-vocab-key="${escapeHtml(entry.vocabKey)}">${lvl}</button>
+              ${[1,2,3].map((lvl) => `
+                <button type="button" class="level-btn ${effectiveLevel === lvl ? 'active' : ''}" data-vocab-level="${lvl}" data-vocab-key="${escapeHtml(entry.vocabKey)}">${lvl}</button>
               `).join('')}
             </div>
           </article>
@@ -2844,7 +2875,7 @@
         if (editBtn) {
           const key = editBtn.dataset.vocabKey;
           const existing = await loadVocabEntryByKey(key);
-          const nextText = window.prompt('Definición personalizada', existing?.userDefinition || '');
+          const nextText = window.prompt('Nota personal', existing?.userDefinition || '');
           if (nextText == null) return;
           await updateUserDefinition(key, nextText);
           state.vocabView.pendingNotes.set(key, nextText);
@@ -2882,6 +2913,7 @@
 
     async function renderVocabularyView() {
       state.route = 'vocabulary';
+      syncDocumentScrollLock();
       const app = $('#app');
       if (!state.vocabView.initialized || !app.querySelector('#vocabList')) {
         app.innerHTML = `
@@ -2900,8 +2932,6 @@
                   <option value="1">Nivel 1</option>
                   <option value="2">Nivel 2</option>
                   <option value="3">Nivel 3</option>
-                  <option value="4">Nivel 4</option>
-                  <option value="5">Nivel 5</option>
                   <option value="none">Sin nivel</option>
                 </select>
               </div>
@@ -2972,8 +3002,14 @@
       return url.toString();
     }
 
+    function syncDocumentScrollLock() {
+      const shouldLock = state.route === 'reader' && state.readingMode === 'sentence';
+      document.body.classList.toggle('reader-sentence-lock', shouldLock);
+    }
+
     async function renderLibraryView() {
       state.route = 'library';
+      syncDocumentScrollLock();
       state.vocabView.loadMoreObserver?.disconnect();
       state.vocabView.initialized = false;
       const app = $('#app');
@@ -3300,6 +3336,8 @@
       const shouldAutoAlign = Boolean(options.alignToCurrentSentence);
       const keepMenuOpen = Boolean(options.keepMenuOpen);
       if (!state.currentBook) return renderLibraryView();
+      state.route = 'reader';
+      syncDocumentScrollLock();
       const app = $('#app');
       const section = state.sections[state.currentSpineIndex];
       const sectionSentences = getSentencesForSection(section);
