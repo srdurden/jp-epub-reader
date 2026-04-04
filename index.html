@@ -926,6 +926,8 @@
       sentenceTokenCache: new Map(),
       pageMapsCache: new Map(),
       pageSummariesCache: new Map(),
+      flatSentenceEntriesCache: null,
+      flatSentenceIndexLookupCache: null,
       settings: { ...DEFAULT_SETTINGS },
       vocabMap: new Map(),
       vocabDataVersion: 0,
@@ -1540,14 +1542,13 @@
         state.currentBookId || 'book',
         state.settings.fontSize,
         state.settings.showSegmentation ? 1 : 0,
-        context.width,
-        context.pageHeight
+        context.width
       ].join('::');
     }
 
     function getPaginationCacheKey(sectionIndex, context = getReaderPaginationContext()) {
-      const section = state.sections[sectionIndex];
-      return `${getPaginationSignature(context)}::${section?.path || sectionIndex}`;
+      const section = state.sections[Math.max(0, Number(sectionIndex) || 0)];
+      return `${getPaginationSignature(context)}::${section?.path || sectionIndex || 0}`;
     }
 
     function getPaginationMeasureInner(context = getReaderPaginationContext()) {
@@ -1560,6 +1561,48 @@
       host.style.width = `${context.width}px`;
       host.innerHTML = `<div class="reader-content" style="width:${context.width}px;--reader-font-size:${state.settings.fontSize}px;"><div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text" id="paginationMeasureInner"></div></div></div>`;
       return host.querySelector('#paginationMeasureInner');
+    }
+
+    function getFlatSentenceEntries(bookId = state.currentBookId) {
+      const cached = state.flatSentenceEntriesCache;
+      if (cached?.bookId === bookId && cached.entries) return cached.entries;
+      const entries = [];
+      state.sections.forEach((section, sectionIndex) => {
+        const sentences = getSentencesForSection(section);
+        sentences.forEach((_, sentenceIndex) => {
+          entries.push({
+            flatIndex: entries.length,
+            sectionIndex,
+            sentenceIndex
+          });
+        });
+      });
+      state.flatSentenceEntriesCache = { bookId, entries };
+      state.flatSentenceIndexLookupCache = null;
+      return entries;
+    }
+
+    function getFlatSentenceIndexLookup(bookId = state.currentBookId) {
+      const cached = state.flatSentenceIndexLookupCache;
+      if (cached?.bookId === bookId && cached.lookup) return cached.lookup;
+      const lookup = new Map();
+      getFlatSentenceEntries(bookId).forEach((entry, flatIndex) => {
+        lookup.set(`${entry.sectionIndex}:${entry.sentenceIndex}`, flatIndex);
+      });
+      state.flatSentenceIndexLookupCache = { bookId, lookup };
+      return lookup;
+    }
+
+    function getFlatSentenceIndexForLocation(sectionIndex, sentenceIndex, bookId = state.currentBookId) {
+      const safeSectionIndex = Math.max(0, Math.min(Number(sectionIndex) || 0, Math.max(state.sections.length - 1, 0)));
+      const sectionSentences = getSentencesForSection(state.sections[safeSectionIndex] || {});
+      const safeSentenceIndex = Math.max(0, Math.min(Number(sentenceIndex) || 0, Math.max(sectionSentences.length - 1, 0)));
+      const lookup = getFlatSentenceIndexLookup(bookId);
+      const exact = lookup.get(`${safeSectionIndex}:${safeSentenceIndex}`);
+      if (Number.isInteger(exact)) return exact;
+      const fallback = lookup.get(`${safeSectionIndex}:0`);
+      if (Number.isInteger(fallback)) return fallback;
+      return 0;
     }
 
     function buildVirtualPageMap(sectionIndex, context = getReaderPaginationContext()) {
@@ -1637,27 +1680,27 @@
 
     function locateGlobalPage(globalPageIndex, context = getReaderPaginationContext()) {
       const summary = getPaginationSummary(context);
-      const targetIndex = Math.max(0, Math.min(Number(globalPageIndex) || 0, summary.totalPages - 1));
-      let cursor = 0;
-      for (let sectionIndex = 0; sectionIndex < state.sections.length; sectionIndex += 1) {
-        const count = summary.sectionPageCounts[sectionIndex] || 1;
-        if (targetIndex < cursor + count) {
-          const pageIndex = targetIndex - cursor;
+      const targetIndex = Math.max(0, Math.min(Number(globalPageIndex) || 0, Math.max(summary.totalPages - 1, 0)));
+      let remaining = targetIndex;
+      for (let sectionIndex = 0; sectionIndex < state.sections.length; sectionIndex++) {
+        const sectionPageCount = summary.sectionPageCounts[sectionIndex] || 1;
+        if (remaining < sectionPageCount) {
           const pageMap = getPageMapForSection(sectionIndex, context);
           return {
             sectionIndex,
-            pageIndex,
-            page: pageMap[Math.max(0, Math.min(pageIndex, pageMap.length - 1))] || { startSentence: 0, endSentence: 0 }
+            pageIndex: remaining,
+            page: pageMap[remaining] || { startSentence: 0, endSentence: 0 }
           };
         }
-        cursor += count;
+        remaining -= sectionPageCount;
       }
-      const lastSectionIndex = Math.max(state.sections.length - 1, 0);
-      const lastPageMap = getPageMapForSection(lastSectionIndex, context);
+      const fallbackSectionIndex = Math.max(state.sections.length - 1, 0);
+      const fallbackPageMap = getPageMapForSection(fallbackSectionIndex, context);
+      const fallbackPageIndex = Math.max(fallbackPageMap.length - 1, 0);
       return {
-        sectionIndex: lastSectionIndex,
-        pageIndex: Math.max(lastPageMap.length - 1, 0),
-        page: lastPageMap[Math.max(lastPageMap.length - 1, 0)] || { startSentence: 0, endSentence: 0 }
+        sectionIndex: fallbackSectionIndex,
+        pageIndex: fallbackPageIndex,
+        page: fallbackPageMap[fallbackPageIndex] || { startSentence: 0, endSentence: 0 }
       };
     }
 
@@ -1667,17 +1710,16 @@
       state.currentSentenceIndex = Math.max(0, location.page.startSentence || 0);
     }
 
-    function renderTokenizedVirtualPageSection(bookId, sectionIndex, sentenceIndex = 0, context = getReaderPaginationContext()) {
+    function renderTokenizedVirtualPage(bookId, sectionIndex, sentenceIndex = 0, context = getReaderPaginationContext()) {
       const tokenizedSentences = getTokenizedSection(bookId, sectionIndex);
       if (!tokenizedSentences.length) return '<p class="status">Sin texto legible en esta sección.</p>';
-      const pageMap = getPageMapForSection(sectionIndex, context);
-      const pageIndex = findPageIndexForSentence(pageMap, sentenceIndex);
-      const page = pageMap[pageIndex] || { startSentence: 0, endSentence: tokenizedSentences.length - 1 };
       const footerPageInfo = getVirtualPageInfoForLocation(sectionIndex, sentenceIndex, context);
-      const visible = tokenizedSentences.slice(page.startSentence, page.endSentence + 1);
-      return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${visible.map((payload, localSentenceIndex) => {
-        const absoluteSentenceIndex = page.startSentence + localSentenceIndex;
-        return `<p class="page-sentence ${absoluteSentenceIndex === sentenceIndex ? 'current-sentence' : ''}" data-sentence-index="${absoluteSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`;
+      const page = footerPageInfo.page;
+      const visibleSentences = tokenizedSentences.slice(page.startSentence, page.endSentence + 1);
+      return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${visibleSentences.map((payload, offset) => {
+        const realSentenceIndex = page.startSentence + offset;
+        const isCurrentSentence = realSentenceIndex === state.currentSentenceIndex;
+        return `<p class="page-sentence ${isCurrentSentence ? 'current-sentence' : ''}" data-section-index="${sectionIndex}" data-sentence-index="${realSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`;
       }).join('')}</div><div class="reader-page-footer">Pg ${footerPageInfo.globalPageCurrent}/${footerPageInfo.globalPageTotal}</div></div>`;
     }
 
@@ -1693,6 +1735,9 @@
 
     function syncCurrentSentenceFromToken(token) {
       if (!Number.isInteger(token?.sentenceIndex)) return;
+      if (Number.isInteger(token?.sectionIndex)) {
+        state.currentSpineIndex = Math.max(0, Math.min(token.sectionIndex, Math.max(state.sections.length - 1, 0)));
+      }
       const sectionSentences = getSentencesForSection(state.sections[state.currentSpineIndex] || {});
       const cap = Math.max(sectionSentences.length - 1, 0);
       state.currentSentenceIndex = Math.max(0, Math.min(token.sentenceIndex, cap));
@@ -2505,12 +2550,14 @@
       state.sentenceTokenCache.clear();
       state.pageMapsCache.clear();
       state.pageSummariesCache.clear();
+      state.flatSentenceEntriesCache = null;
+      state.flatSentenceIndexLookupCache = null;
 
       await dbPut(STORES.books, { ...book, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       await saveSettings({ lastOpenedBookId: bookId });
       state.route = 'reader';
       await refreshBooks();
-      renderReaderView();
+      renderReaderView({ alignToCurrentSentence: true });
     }
 
     async function persistCurrentProgress() {
@@ -2537,7 +2584,7 @@
       state.currentSentenceIndex = Math.max(0, Math.min(state.currentSentenceIndex, sentenceCap));
       closeTokenPanel();
       await persistCurrentProgress();
-      renderReaderView();
+      renderReaderView({ alignToCurrentSentence: true });
     }
 
     async function nextStep() {
@@ -2556,7 +2603,7 @@
         }
       }
       await persistCurrentProgress();
-      renderReaderView();
+      renderReaderView({ alignToCurrentSentence: true });
     }
 
     async function prevStep() {
@@ -2575,7 +2622,7 @@
         }
       }
       await persistCurrentProgress();
-      renderReaderView();
+      renderReaderView({ alignToCurrentSentence: true });
     }
 
     // =========================
@@ -3046,7 +3093,7 @@
     function renderPageMode(section, sectionIndex, paginationContext = getReaderPaginationContext()) {
       return `
         <div id="tokenPanelHost"></div>
-        ${renderTokenizedVirtualPageSection(state.currentBookId, sectionIndex, state.currentSentenceIndex, paginationContext)}
+        ${renderTokenizedVirtualPage(state.currentBookId, sectionIndex, state.currentSentenceIndex, paginationContext)}
       `;
     }
 
@@ -3086,7 +3133,8 @@
       window.speechSynthesis.speak(utterance);
     }
 
-    async function renderReaderView() {
+    async function renderReaderView(options = {}) {
+      const shouldAutoAlign = Boolean(options.alignToCurrentSentence);
       if (!state.currentBook) return renderLibraryView();
       const app = $('#app');
       const section = state.sections[state.currentSpineIndex];
@@ -3144,7 +3192,7 @@
       $('#pageProgress').addEventListener('change', async (e) => {
         goToGlobalPage(Number(e.target.value));
         await persistCurrentProgress();
-        renderReaderView();
+        renderReaderView({ alignToCurrentSentence: true });
       });
       $('#prevBtn').addEventListener('click', prevStep);
       $('#nextBtn').addEventListener('click', nextStep);
@@ -3156,7 +3204,7 @@
         await saveSettings({ fontSize: Number(e.target.value) });
         state.pageMapsCache.clear();
         state.pageSummariesCache.clear();
-        renderReaderView();
+        renderReaderView({ alignToCurrentSentence: true });
         await persistCurrentProgress();
       });
 
@@ -3169,7 +3217,9 @@
           await openTokenPanel(token, { bookId: state.currentBookId });
           speakNativeTts(token?.surface || token?.baseForm || '', { lang: 'ja-JP' });
         });
-        requestAnimationFrame(() => requestAnimationFrame(() => alignPageModeToCurrentSentence()));
+        if (shouldAutoAlign) {
+          requestAnimationFrame(() => requestAnimationFrame(() => alignPageModeToCurrentSentence()));
+        }
       }
 
       if (state.readingMode === 'sentence') {
@@ -3259,15 +3309,48 @@ self.addEventListener('fetch', (event) => {
     // =========================
     // Inicialización
     // =========================
+    function getReaderViewportState() {
+      const docEl = document.documentElement;
+      const visualViewport = window.visualViewport;
+      return {
+        layoutWidth: Math.round(docEl?.clientWidth || window.innerWidth || 0),
+        layoutHeight: Math.round(docEl?.clientHeight || window.innerHeight || 0),
+        innerWidth: Math.round(window.innerWidth || 0),
+        innerHeight: Math.round(window.innerHeight || 0),
+        visualWidth: Math.round(visualViewport?.width || 0),
+        visualHeight: Math.round(visualViewport?.height || 0),
+        orientation: (window.innerWidth || 0) > (window.innerHeight || 0) ? 'landscape' : 'portrait'
+      };
+    }
+
     let readerResizeDebounce = null;
+    let lastReaderViewportState = getReaderViewportState();
     window.addEventListener('resize', () => {
-      if (state.route !== 'reader') return;
+      const nextViewportState = getReaderViewportState();
+      if (state.route !== 'reader') {
+        lastReaderViewportState = nextViewportState;
+        return;
+      }
+
+      const widthDelta = Math.abs(nextViewportState.layoutWidth - lastReaderViewportState.layoutWidth);
+      const innerWidthDelta = Math.abs(nextViewportState.innerWidth - lastReaderViewportState.innerWidth);
+      const orientationChanged = nextViewportState.orientation !== lastReaderViewportState.orientation;
+
+      lastReaderViewportState = nextViewportState;
+
+      // En Safari iOS la barra de navegación puede provocar "resize" mientras se hace scroll.
+      // En modo página, con 17 frases fijas por página, esos cambios de altura no deben forzar
+      // un re-render ni recolocar la lectura. Solo reaccionamos a cambios reales de ancho/orientación.
+      if (!orientationChanged && widthDelta < 24 && innerWidthDelta < 24) {
+        return;
+      }
+
       clearTimeout(readerResizeDebounce);
       readerResizeDebounce = setTimeout(async () => {
         closeTokenPanel();
         state.pageMapsCache.clear();
         state.pageSummariesCache.clear();
-        renderReaderView();
+        renderReaderView({ alignToCurrentSentence: false });
         await persistCurrentProgress();
       }, 140);
     });
