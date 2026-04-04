@@ -161,8 +161,41 @@
       background: color-mix(in srgb, var(--border) 70%, #f3f4f6 30%);
       border-radius: 999px;
     }
-    .reader-content-wrap { position: relative; }
-    .reader-content {
+    .reader-content-wrap {
+      position: relative;
+      overflow: hidden;
+      touch-action: pan-y;
+    }
+    .reader-content-wrap.is-dragging {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .reader-carousel {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+    }
+    .reader-carousel-track {
+      display: flex;
+      width: 300%;
+      will-change: transform;
+      transform: translate3d(calc(-100% + var(--reader-drag-offset, 0px)), 0, 0);
+      transition: transform 220ms ease;
+    }
+    .reader-carousel-track.is-dragging {
+      transition: none;
+    }
+    .reader-carousel-panel {
+      flex: 0 0 100%;
+      min-width: 100%;
+      padding: 0 4px;
+    }
+    .reader-carousel-panel[data-panel-role="prev"],
+    .reader-carousel-panel[data-panel-role="next"] {
+      pointer-events: none;
+    }
+    .reader-content,
+    .reader-preview-content {
       min-height: calc(100vh - 210px);
       overflow: visible;
       border: 0;
@@ -172,7 +205,25 @@
       line-height: 1.85;
       font-size: var(--reader-font-size, 18px);
     }
-    .reader-content iframe { width: 100%; min-height: 56vh; border: 0; }
+    .reader-content iframe,
+    .reader-preview-content iframe { width: 100%; min-height: 56vh; border: 0; }
+    .reader-preview-content {
+      opacity: 0.78;
+      filter: saturate(0.96);
+    }
+    .reader-preview-empty {
+      min-height: calc(100vh - 210px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 4px 12px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      text-align: center;
+    }
+    .sentence-hero-preview {
+      min-height: 122px;
+    }
     .sentence-box { font-size: 1em; line-height: 1.9; white-space: pre-wrap; }
     .page-mode-text {
       font-size: 1em;
@@ -1678,15 +1729,16 @@
       state.currentSentenceIndex = Math.max(0, location.page.startSentence || 0);
     }
 
-    function renderTokenizedVirtualPage(bookId, sectionIndex, sentenceIndex = 0, context = getReaderPaginationContext()) {
+    function renderTokenizedVirtualPage(bookId, sectionIndex, sentenceIndex = 0, context = getReaderPaginationContext(), options = {}) {
       const tokenizedSentences = getTokenizedSection(bookId, sectionIndex);
       if (!tokenizedSentences.length) return '<p class="status">Sin texto legible en esta sección.</p>';
       const footerPageInfo = getVirtualPageInfoForLocation(sectionIndex, sentenceIndex, context);
       const page = footerPageInfo.page;
       const visibleSentences = tokenizedSentences.slice(page.startSentence, page.endSentence + 1);
+      const activeSentenceIndex = Number.isInteger(options.activeSentenceIndex) ? options.activeSentenceIndex : null;
       return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${visibleSentences.map((payload, offset) => {
         const realSentenceIndex = page.startSentence + offset;
-        const isCurrentSentence = realSentenceIndex === state.currentSentenceIndex;
+        const isCurrentSentence = activeSentenceIndex !== null && realSentenceIndex === activeSentenceIndex;
         return `<p class="page-sentence ${isCurrentSentence ? 'current-sentence' : ''}" data-section-index="${sectionIndex}" data-sentence-index="${realSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`;
       }).join('')}</div><div class="reader-page-footer">Pg ${footerPageInfo.globalPageCurrent}/${footerPageInfo.globalPageTotal}</div></div>`;
     }
@@ -3069,32 +3121,137 @@
       }));
     }
 
-    function renderPageMode(section, sectionIndex, paginationContext = getReaderPaginationContext()) {
+    function getNormalizedReaderLocation(location = {}) {
+      const safeSectionIndex = Math.max(0, Math.min(Number(location.sectionIndex) || 0, Math.max(state.sections.length - 1, 0)));
+      const section = state.sections[safeSectionIndex] || {};
+      const sentences = getSentencesForSection(section);
+      const safeSentenceIndex = Math.max(0, Math.min(Number(location.sentenceIndex) || 0, Math.max(sentences.length - 1, 0)));
+      return {
+        sectionIndex: safeSectionIndex,
+        sentenceIndex: safeSentenceIndex
+      };
+    }
+
+    function getAdjacentReaderLocation(step, fromLocation = { sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex }, context = getReaderPaginationContext()) {
+      const direction = Number(step) || 0;
+      const base = getNormalizedReaderLocation(fromLocation);
+      if (!direction) return base;
+
+      if (state.readingMode === 'page') {
+        const pageInfo = getVirtualPageInfoForLocation(base.sectionIndex, base.sentenceIndex, context);
+        const targetPageIndex = pageInfo.globalPageIndex + direction;
+        if (targetPageIndex < 0 || targetPageIndex >= pageInfo.globalPageTotal) return null;
+        const located = locateGlobalPage(targetPageIndex, context);
+        return getNormalizedReaderLocation({
+          sectionIndex: located.sectionIndex,
+          sentenceIndex: located.page.startSentence || 0
+        });
+      }
+
+      let sectionIndex = base.sectionIndex;
+      let sentenceIndex = base.sentenceIndex;
+      let remaining = direction;
+      while (remaining !== 0) {
+        if (remaining > 0) {
+          const sentences = getSentencesForSection(state.sections[sectionIndex] || {});
+          if (sentenceIndex < Math.max(sentences.length - 1, 0)) {
+            sentenceIndex += 1;
+          } else if (sectionIndex < state.sections.length - 1) {
+            sectionIndex += 1;
+            sentenceIndex = 0;
+          } else {
+            return null;
+          }
+          remaining -= 1;
+        } else {
+          if (sentenceIndex > 0) {
+            sentenceIndex -= 1;
+          } else if (sectionIndex > 0) {
+            sectionIndex -= 1;
+            const previousSectionSentences = getSentencesForSection(state.sections[sectionIndex] || {});
+            sentenceIndex = Math.max(previousSectionSentences.length - 1, 0);
+          } else {
+            return null;
+          }
+          remaining += 1;
+        }
+      }
+
+      return getNormalizedReaderLocation({ sectionIndex, sentenceIndex });
+    }
+
+    function renderEmptyReaderPanel(label = 'Sin más contenido') {
+      return `<div class="reader-preview-empty">${escapeHtml(label)}</div>`;
+    }
+
+    function renderPageModeForLocation(location, paginationContext = getReaderPaginationContext(), options = {}) {
+      const safeLocation = getNormalizedReaderLocation(location);
+      const wrapperClass = options.preview ? 'reader-preview-content' : 'reader-content';
+      const highlightSentenceIndex = options.preview ? null : safeLocation.sentenceIndex;
       return `
-        <div id="tokenPanelHost"></div>
-        ${renderTokenizedVirtualPage(state.currentBookId, sectionIndex, state.currentSentenceIndex, paginationContext)}
+        <div class="${wrapperClass}" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">
+          ${options.preview ? '' : '<div id="tokenPanelHost"></div>'}
+          ${renderTokenizedVirtualPage(state.currentBookId, safeLocation.sectionIndex, safeLocation.sentenceIndex, paginationContext, { activeSentenceIndex: highlightSentenceIndex })}
+        </div>
       `;
     }
 
-    function renderSentenceMode(section) {
+    function renderSentenceModeForLocation(location, options = {}) {
+      const safeLocation = getNormalizedReaderLocation(location);
+      const section = state.sections[safeLocation.sectionIndex] || {};
       const sentences = getSentencesForSection(section);
-      const idx = Math.max(0, Math.min(state.currentSentenceIndex, Math.max(0, sentences.length - 1)));
+      const idx = Math.max(0, Math.min(safeLocation.sentenceIndex, Math.max(0, sentences.length - 1)));
       const tokenized = shouldTokenizeCurrentView()
-        ? getTokenizedSentence(state.currentBookId, state.currentSpineIndex, idx)
+        ? getTokenizedSentence(state.currentBookId, safeLocation.sectionIndex, idx)
         : { sentence: sentences[idx] || '', tokens: [] };
       const sentence = tokenized.sentence || 'Sin texto legible en esta sección.';
       const sentenceHtml = tokenized.tokens.length
         ? renderSegmentedSentence(tokenized, { segmented: state.settings.showSegmentation })
         : escapeHtml(sentence);
+      const wrapperClass = options.preview ? 'reader-preview-content' : 'reader-content';
       return `
-        <div class="sentence-hero">
-          <button id="playSentenceBtn" class="play-main" title="Reproducir oración">▶</button>
+        <div class="${wrapperClass}" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">
+          ${options.preview ? '<div class="sentence-hero sentence-hero-preview" aria-hidden="true"></div>' : `
+            <div class="sentence-hero">
+              <button id="playSentenceBtn" class="play-main" title="Reproducir oración">▶</button>
+            </div>
+            <div id="tokenPanelHost"></div>
+          `}
+          <div class="sentence-box">${sentenceHtml}</div>
+          ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
+          ${options.preview ? '' : '<button id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;">Traducir oración</button>'}
         </div>
-        <div id="tokenPanelHost"></div>
-        <div class="sentence-box">${sentenceHtml}</div>
-        ${state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
-        <button id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;">Traducir oración</button>
       `;
+    }
+
+    function renderReaderPanelForLocation(location, options = {}) {
+      if (!location) return renderEmptyReaderPanel(options.emptyLabel || 'Sin más contenido');
+      return state.readingMode === 'page'
+        ? renderPageModeForLocation(location, options.paginationContext, options)
+        : renderSentenceModeForLocation(location, options);
+    }
+
+    function renderReaderCarousel(paginationContext = getReaderPaginationContext()) {
+      const currentLocation = getNormalizedReaderLocation({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex });
+      const previousLocation = getAdjacentReaderLocation(-1, currentLocation, paginationContext);
+      const nextLocation = getAdjacentReaderLocation(1, currentLocation, paginationContext);
+      return `
+        <div class="reader-carousel" id="readerCarousel" data-has-prev="${previousLocation ? '1' : '0'}" data-has-next="${nextLocation ? '1' : '0'}">
+          <div class="reader-carousel-track" id="readerCarouselTrack" style="--reader-drag-offset:0px;">
+            <section class="reader-carousel-panel" data-panel-role="prev">${renderReaderPanelForLocation(previousLocation, { preview: true, emptyLabel: 'Inicio del libro', paginationContext })}</section>
+            <section class="reader-carousel-panel" id="currentReaderPanel" data-panel-role="current">${renderReaderPanelForLocation(currentLocation, { preview: false, paginationContext })}</section>
+            <section class="reader-carousel-panel" data-panel-role="next">${renderReaderPanelForLocation(nextLocation, { preview: true, emptyLabel: 'Fin del libro', paginationContext })}</section>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPageMode(section, sectionIndex, paginationContext = getReaderPaginationContext()) {
+      return renderPageModeForLocation({ sectionIndex, sentenceIndex: state.currentSentenceIndex }, paginationContext, { preview: false });
+    }
+
+    function renderSentenceMode(section) {
+      return renderSentenceModeForLocation({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex }, { preview: false });
     }
 
     function speakNativeTts(text, options = {}) {
@@ -3157,7 +3314,7 @@
             </div>
           </div>
           <div class="reader-content-wrap">
-            <div class="reader-content" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">${state.readingMode === 'page' ? renderPageMode(section, state.currentSpineIndex, initialContext) : renderSentenceMode(section)}</div>
+            ${renderReaderCarousel(initialContext)}
           </div>
         </div>
       `;
@@ -3194,7 +3351,7 @@
       });
 
       if (state.readingMode === 'page') {
-        $('.reader-content')?.addEventListener('click', async (e) => {
+        $('#currentReaderPanel .reader-content')?.addEventListener('click', async (e) => {
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
           if (!tokenEl) return;
           const token = getTokenFromElement(tokenEl);
@@ -3223,7 +3380,7 @@
           const url = 'https://chatgpt.com/?q=' + encodeURIComponent(prompt);
           window.open(url, '_blank', 'noopener,noreferrer');
         });
-        $('.sentence-box')?.addEventListener('click', async (e) => {
+        $('#currentReaderPanel .sentence-box')?.addEventListener('click', async (e) => {
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
           if (!tokenEl) return;
           const token = getTokenFromElement(tokenEl);
@@ -3238,44 +3395,148 @@
 
     function attachReaderSwipeGestures() {
       const swipeSurface = document.querySelector('.reader-content-wrap');
-      if (!swipeSurface || swipeSurface.dataset.swipeAttached === '1') return;
+      const swipeTrack = document.getElementById('readerCarouselTrack');
+      if (!swipeSurface || !swipeTrack || swipeSurface.dataset.swipeAttached === '1') return;
       swipeSurface.dataset.swipeAttached = '1';
-      const minHorizontalDelta = 45;
-      const maxVerticalDelta = 70;
-      const maxGestureMs = 700;
-      const stateGesture = { x: 0, y: 0, t: 0, active: false };
-      const isInteractiveTarget = (target) => Boolean(target?.closest('button, input, a, .token, [data-interactive="1"], #tokenPanelHost, .reader-card'));
-      const onStart = (point, target) => {
-        if (isInteractiveTarget(target)) {
+
+      const minHorizontalDelta = 42;
+      const maxVerticalDelta = 86;
+      const quickSwipeMs = 260;
+      const stateGesture = {
+        pointerId: null,
+        x: 0,
+        y: 0,
+        lastX: 0,
+        lastY: 0,
+        t: 0,
+        active: false,
+        dragging: false,
+        committing: false
+      };
+
+      const isInteractiveTarget = (target) => Boolean(target?.closest('button, input, textarea, select, a, .token, [data-interactive="1"], #tokenPanelHost, .reader-card'));
+      const getPanelWidth = () => swipeSurface.clientWidth || window.innerWidth || 1;
+      const hasPrev = () => document.getElementById('readerCarousel')?.dataset.hasPrev === '1';
+      const hasNext = () => document.getElementById('readerCarousel')?.dataset.hasNext === '1';
+
+      const setTrackOffset = (valuePx, options = {}) => {
+        if (options.immediate) swipeTrack.classList.add('is-dragging');
+        else swipeTrack.classList.remove('is-dragging');
+        swipeTrack.style.setProperty('--reader-drag-offset', `${Math.round(valuePx)}px`);
+      };
+
+      const resetTrackPosition = (options = {}) => {
+        if (options.immediate) swipeTrack.classList.add('is-dragging');
+        else swipeTrack.classList.remove('is-dragging');
+        swipeTrack.style.setProperty('--reader-drag-offset', '0px');
+        swipeSurface.classList.toggle('is-dragging', Boolean(options.immediate));
+      };
+
+      const finishGesture = () => {
+        stateGesture.pointerId = null;
+        stateGesture.active = false;
+        stateGesture.dragging = false;
+        swipeSurface.classList.remove('is-dragging');
+      };
+
+      const waitForTrackTransition = () => new Promise((resolve) => {
+        let done = false;
+        const finalize = () => {
+          if (done) return;
+          done = true;
+          swipeTrack.removeEventListener('transitionend', onEnd);
+          resolve();
+        };
+        const onEnd = (event) => {
+          if (event.target !== swipeTrack) return;
+          finalize();
+        };
+        swipeTrack.addEventListener('transitionend', onEnd);
+        setTimeout(finalize, 260);
+      });
+
+      const animateCommit = async (direction) => {
+        if (stateGesture.committing) return;
+        stateGesture.committing = true;
+        swipeTrack.classList.remove('is-dragging');
+        swipeSurface.classList.remove('is-dragging');
+        setTrackOffset(direction < 0 ? -getPanelWidth() : getPanelWidth());
+        await waitForTrackTransition();
+        if (direction < 0) await nextStep();
+        else await prevStep();
+        stateGesture.committing = false;
+      };
+
+      const onPointerDown = (event) => {
+        if (stateGesture.committing) return;
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (isInteractiveTarget(event.target)) {
           stateGesture.active = false;
           return;
         }
-        stateGesture.x = point.x;
-        stateGesture.y = point.y;
+        stateGesture.pointerId = event.pointerId;
+        stateGesture.x = event.clientX;
+        stateGesture.y = event.clientY;
+        stateGesture.lastX = event.clientX;
+        stateGesture.lastY = event.clientY;
         stateGesture.t = Date.now();
         stateGesture.active = true;
-      };
-      const onEnd = async (point) => {
-        if (!stateGesture.active) return;
-        stateGesture.active = false;
-        const elapsed = Date.now() - stateGesture.t;
-        const dx = point.x - stateGesture.x;
-        const dy = point.y - stateGesture.y;
-        if (elapsed > maxGestureMs) return;
-        if (Math.abs(dx) < minHorizontalDelta) return;
-        if (Math.abs(dy) > maxVerticalDelta) return;
-        if (dx < 0) await nextStep();
-        else await prevStep();
+        stateGesture.dragging = false;
+        try { swipeSurface.setPointerCapture(event.pointerId); } catch (err) {}
+        resetTrackPosition({ immediate: true });
       };
 
-      swipeSurface.addEventListener('pointerdown', (e) => {
-        onStart({ x: e.clientX, y: e.clientY }, e.target);
-      });
-      swipeSurface.addEventListener('pointerup', (e) => {
-        onEnd({ x: e.clientX, y: e.clientY });
-      });
+      const onPointerMove = (event) => {
+        if (!stateGesture.active || event.pointerId !== stateGesture.pointerId || stateGesture.committing) return;
+        const dx = event.clientX - stateGesture.x;
+        const dy = event.clientY - stateGesture.y;
+        stateGesture.lastX = event.clientX;
+        stateGesture.lastY = event.clientY;
+
+        if (!stateGesture.dragging) {
+          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+          if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) {
+            finishGesture();
+            resetTrackPosition({ immediate: false });
+            return;
+          }
+          stateGesture.dragging = true;
+        }
+
+        let limitedDx = dx;
+        const edgeLimit = 54;
+        if (dx > 0 && !hasPrev()) limitedDx = Math.min(dx, edgeLimit);
+        if (dx < 0 && !hasNext()) limitedDx = Math.max(dx, -edgeLimit);
+        swipeSurface.classList.add('is-dragging');
+        setTrackOffset(limitedDx, { immediate: true });
+        event.preventDefault();
+      };
+
+      const onPointerEnd = async (event) => {
+        if (!stateGesture.active || event.pointerId !== stateGesture.pointerId || stateGesture.committing) return;
+        const elapsed = Date.now() - stateGesture.t;
+        const dx = (event.clientX || stateGesture.lastX) - stateGesture.x;
+        const dy = (event.clientY || stateGesture.lastY) - stateGesture.y;
+        const shouldCommit = Math.abs(dx) >= Math.max(minHorizontalDelta, getPanelWidth() * 0.16) || (elapsed <= quickSwipeMs && Math.abs(dx) >= 28);
+        const direction = dx < 0 ? -1 : 1;
+        const canCommit = direction < 0 ? hasNext() : hasPrev();
+
+        finishGesture();
+
+        if (Math.abs(dy) > maxVerticalDelta || Math.abs(dx) < minHorizontalDelta || !shouldCommit || !canCommit) {
+          resetTrackPosition({ immediate: false });
+          return;
+        }
+
+        await animateCommit(direction);
+      };
+
+      swipeSurface.addEventListener('pointerdown', onPointerDown);
+      swipeSurface.addEventListener('pointermove', onPointerMove);
+      swipeSurface.addEventListener('pointerup', onPointerEnd);
       swipeSurface.addEventListener('pointercancel', () => {
-        stateGesture.active = false;
+        finishGesture();
+        resetTrackPosition({ immediate: false });
       });
     }
 
