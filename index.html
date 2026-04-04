@@ -177,7 +177,8 @@
     }
     .reader-carousel-track {
       display: flex;
-      width: 300%;
+      width: 100%;
+      min-width: 100%;
       will-change: transform;
       transform: translate3d(calc(-100% + var(--reader-drag-offset, 0px)), 0, 0);
       transition: transform 220ms ease;
@@ -188,7 +189,7 @@
     .reader-carousel-panel {
       flex: 0 0 100%;
       width: 100%;
-      min-width: 0;
+      min-width: 100%;
       max-width: 100%;
       padding: 0 4px;
       overflow: hidden;
