@@ -613,17 +613,17 @@
       gap: 8px;
       padding: 0 2px;
     }
-    .book-progress-head {
+    .book-progress-meta {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 14px;
-      font-size: clamp(1.02rem, 4.2vw, 1.13rem);
-      font-weight: 500;
+      color: var(--muted);
+      font-size: clamp(0.72rem, 2.9vw, 0.78rem);
+      font-weight: 400;
       margin-bottom: 0;
     }
-    .book-progress-head span:last-child {
-      color: var(--text);
+    .book-progress-meta span:last-child {
       white-space: nowrap;
     }
     .book-progress-shell input[type="range"] {
@@ -796,8 +796,8 @@
       .book-progress-shell {
         padding: 0;
       }
-      .book-progress-head {
-        font-size: 0.92rem;
+      .book-progress-meta {
+        font-size: 0.72rem;
         gap: 8px;
       }
       .book-delete-btn {
@@ -2943,14 +2943,14 @@
                       ${escapeHtml(b.title || b.fileName)}
                     </button>
                   </h2>
-                  <p class="book-author">Autor: ${escapeHtml(b.author || 'Desconocido')}</p>
+                  <p class="book-author">${escapeHtml(b.author || 'Desconocido')}</p>
                 </div>
                 <div class="book-progress-shell">
-                  <div class="book-progress-head">
+                  <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
+                  <div class="book-progress-meta">
                     <span>${percent}</span>
                     <span>${rightLabel}</span>
                   </div>
-                  <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
                 </div>
                 <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.5h15"></path><path d="M9.5 3.75h5"></path><path d="M8 7.5v10.25a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7.5"></path><path d="M10.25 10.5v4.75"></path><path d="M13.75 10.5v4.75"></path></svg></button>
               </article>`;
