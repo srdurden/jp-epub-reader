@@ -1568,34 +1568,15 @@
         return [{ startSentence: 0, endSentence: 0 }];
       }
 
-      const inner = getPaginationMeasureInner(context);
       const pages = [];
-      let pageStart = 0;
-
-      inner.innerHTML = '';
-      for (let sentenceIndex = 0; sentenceIndex < tokenizedSentences.length; sentenceIndex += 1) {
-        const paragraph = document.createElement('p');
-        paragraph.className = 'page-sentence';
-        paragraph.dataset.sentenceIndex = String(sentenceIndex);
-        paragraph.innerHTML = renderSegmentedSentence(tokenizedSentences[sentenceIndex], { segmented: state.settings.showSegmentation });
-        inner.appendChild(paragraph);
-
-        if (inner.scrollHeight > context.pageHeight && inner.childElementCount > 1) {
-          inner.removeChild(paragraph);
-          pages.push({ startSentence: pageStart, endSentence: sentenceIndex - 1 });
-          inner.innerHTML = '';
-          pageStart = sentenceIndex;
-          inner.appendChild(paragraph);
-        }
-      }
-
-      const lastSentenceIndex = tokenizedSentences.length - 1;
-      if (pageStart <= lastSentenceIndex) {
-        pages.push({ startSentence: pageStart, endSentence: lastSentenceIndex });
+      const sentencesPerPage = 17;
+      for (let pageStart = 0; pageStart < tokenizedSentences.length; pageStart += sentencesPerPage) {
+        const endSentence = Math.min(pageStart + sentencesPerPage - 1, tokenizedSentences.length - 1);
+        pages.push({ startSentence: pageStart, endSentence });
       }
 
       if (!pages.length) {
-        pages.push({ startSentence: 0, endSentence: lastSentenceIndex });
+        pages.push({ startSentence: 0, endSentence: tokenizedSentences.length - 1 });
       }
       return pages;
     }
@@ -1693,13 +1674,11 @@
       const pageIndex = findPageIndexForSentence(pageMap, sentenceIndex);
       const page = pageMap[pageIndex] || { startSentence: 0, endSentence: tokenizedSentences.length - 1 };
       const footerPageInfo = getVirtualPageInfoForLocation(sectionIndex, sentenceIndex, context);
-      const chapterCurrent = Math.min(sectionIndex + 1, Math.max(state.sections.length, 1));
-      const chapterTotal = Math.max(state.sections.length, 1);
       const visible = tokenizedSentences.slice(page.startSentence, page.endSentence + 1);
       return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${visible.map((payload, localSentenceIndex) => {
         const absoluteSentenceIndex = page.startSentence + localSentenceIndex;
         return `<p class="page-sentence ${absoluteSentenceIndex === sentenceIndex ? 'current-sentence' : ''}" data-sentence-index="${absoluteSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`;
-      }).join('')}</div><div class="reader-page-footer">Pg ${footerPageInfo.globalPageCurrent}/${footerPageInfo.globalPageTotal} - Cap ${chapterCurrent}/${chapterTotal}</div></div>`;
+      }).join('')}</div><div class="reader-page-footer">Pg ${footerPageInfo.globalPageCurrent}/${footerPageInfo.globalPageTotal}</div></div>`;
     }
 
     function alignPageModeToCurrentSentence() {
@@ -2920,11 +2899,9 @@
             ${state.books.length ? state.books.map((b) => {
             const pg = progressMap.get(b.id);
             const percent = pg?.percent != null ? `${pg.percent}%` : '0%';
-            const sectionTotal = Math.max(b.sectionCount || ((pg?.currentSectionIndex ?? 0) + 1), 1);
-            const sectionCurrent = Math.min((pg?.currentSectionIndex ?? 0) + 1, sectionTotal);
             const currentPage = Math.max((pg?.currentGlobalPageIndex ?? 0) + 1, 1);
             const totalPages = Math.max(pg?.totalPages || currentPage, 1);
-            const rightLabel = `Cap ${sectionCurrent}/${sectionTotal} · Pág ${currentPage}/${totalPages}`;
+            const rightLabel = `Pág ${currentPage}/${totalPages}`;
             return `
               <article class="book-tile">
                 <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
@@ -3116,8 +3093,6 @@
       const sectionSentences = getSentencesForSection(section);
       const sentenceCurrent = Math.min(Math.max(state.currentSentenceIndex + 1, 1), Math.max(sectionSentences.length, 1));
       const sentenceTotal = Math.max(sectionSentences.length, 1);
-      const chapterCurrent = Math.min(state.currentSpineIndex + 1, Math.max(state.sections.length, 1));
-      const chapterTotal = Math.max(state.sections.length, 1);
       const initialContext = getReaderPaginationContext();
       const pageInfo = getCurrentVirtualPageInfo(initialContext);
       const percent = Math.round((pageInfo.globalPageCurrent / Math.max(pageInfo.globalPageTotal, 1)) * 100);
@@ -3136,19 +3111,12 @@
               <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
             </div>
             <div id="readerMenu" class="toolbar reader-menu hidden">
-              <div class="reader-menu-section">
-                <label>Capítulo
-                  <select id="sectionSelect">${state.sections.map((s, i) => `<option value="${i}">${i+1}. ${escapeHtml(s.title)}</option>`).join('')}</select>
-                </label>
-              </div>
-              <div class="reader-menu-divider" aria-hidden="true"></div>
               <div class="reader-menu-section reader-status-strip">
                 <div class="reader-status-title">${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</div>
                 <div class="reader-status-subtitle">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</div>
                 <div class="reader-status-metrics">
                   <span class="reader-status-chip">${percent}%</span>
                   <span class="reader-status-chip">Pág ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</span>
-                  <span class="reader-status-chip">Cap ${chapterCurrent}/${chapterTotal}</span>
                   <span class="reader-status-chip">Frase ${sentenceCurrent}/${sentenceTotal}</span>
                 </div>
               </div>
@@ -3165,8 +3133,6 @@
           </div>
         </div>
       `;
-
-      $('#sectionSelect').value = String(state.currentSpineIndex);
 
       $('#readerExitBtn').addEventListener('click', async () => {
         closeTokenPanel();
@@ -3185,12 +3151,6 @@
       $('#toggleModeBtn').addEventListener('click', () => {
         const targetMode = state.readingMode === 'page' ? 'sentence' : 'page';
         setReadingMode(targetMode);
-      });
-      $('#sectionSelect').addEventListener('change', async (e) => {
-        state.currentSpineIndex = Number(e.target.value);
-        state.currentSentenceIndex = 0;
-        await persistCurrentProgress();
-        renderReaderView();
       });
       $('#fontSize').addEventListener('input', async (e) => {
         await saveSettings({ fontSize: Number(e.target.value) });
