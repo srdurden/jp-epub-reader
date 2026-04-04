@@ -3443,7 +3443,12 @@
         committing: false
       };
 
-      const isInteractiveTarget = (target) => Boolean(target?.closest('button, input, textarea, select, a, .token, [data-interactive="1"], #tokenPanelHost, .reader-card'));
+      const isInteractiveTarget = (target) => {
+        const elementTarget = target instanceof Element
+          ? target
+          : target?.parentElement || null;
+        return Boolean(elementTarget?.closest('button, input, textarea, select, a, .token, [data-interactive="1"], #tokenPanelHost, .reader-card'));
+      };
       const getPanelWidth = () => swipeSurface.clientWidth || window.innerWidth || 1;
       const hasPrev = () => document.getElementById('readerCarousel')?.dataset.hasPrev === '1';
       const hasNext = () => document.getElementById('readerCarousel')?.dataset.hasNext === '1';
