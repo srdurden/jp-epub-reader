@@ -2931,7 +2931,7 @@
             const totalPages = Math.max(pg?.totalPages || currentPage, 1);
             const rightLabel = `Pág ${currentPage}/${totalPages}`;
             return `
-              <article class="book-tile">
+              <article class="book-tile" data-book-tile-open="${b.id}">
                 <div class="book-cover-shell">
                   <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
                     <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title || b.fileName)}" />` : `<div class="cover"></div>`}</div>
@@ -3034,6 +3034,13 @@
       });
 
       app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
+      app.querySelectorAll('[data-book-tile-open]').forEach((tile) => {
+        tile.addEventListener('click', (e) => {
+          if (e.target.closest('[data-delete]')) return;
+          if (e.target.closest('[data-open]')) return;
+          openReader(tile.dataset.bookTileOpen);
+        });
+      });
       $('#importDictPackBtn').addEventListener('click', () => {
         closeLibraryMenu();
         $('#dictPackInput')?.click();
@@ -3225,6 +3232,51 @@
           speakNativeTts(token?.surface || token?.baseForm || '', { lang: 'ja-JP' });
         });
       }
+
+      attachReaderSwipeGestures();
+    }
+
+    function attachReaderSwipeGestures() {
+      const swipeSurface = document.querySelector('.reader-content-wrap');
+      if (!swipeSurface || swipeSurface.dataset.swipeAttached === '1') return;
+      swipeSurface.dataset.swipeAttached = '1';
+      const minHorizontalDelta = 45;
+      const maxVerticalDelta = 70;
+      const maxGestureMs = 700;
+      const stateGesture = { x: 0, y: 0, t: 0, active: false };
+      const isInteractiveTarget = (target) => Boolean(target?.closest('button, input, a, .token, [data-interactive="1"], #tokenPanelHost, .reader-card'));
+      const onStart = (point, target) => {
+        if (isInteractiveTarget(target)) {
+          stateGesture.active = false;
+          return;
+        }
+        stateGesture.x = point.x;
+        stateGesture.y = point.y;
+        stateGesture.t = Date.now();
+        stateGesture.active = true;
+      };
+      const onEnd = async (point) => {
+        if (!stateGesture.active) return;
+        stateGesture.active = false;
+        const elapsed = Date.now() - stateGesture.t;
+        const dx = point.x - stateGesture.x;
+        const dy = point.y - stateGesture.y;
+        if (elapsed > maxGestureMs) return;
+        if (Math.abs(dx) < minHorizontalDelta) return;
+        if (Math.abs(dy) > maxVerticalDelta) return;
+        if (dx < 0) await nextStep();
+        else await prevStep();
+      };
+
+      swipeSurface.addEventListener('pointerdown', (e) => {
+        onStart({ x: e.clientX, y: e.clientY }, e.target);
+      });
+      swipeSurface.addEventListener('pointerup', (e) => {
+        onEnd({ x: e.clientX, y: e.clientY });
+      });
+      swipeSurface.addEventListener('pointercancel', () => {
+        stateGesture.active = false;
+      });
     }
 
     // =========================
