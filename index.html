@@ -608,13 +608,10 @@
       font-size: clamp(1rem, 4vw, 1.08rem);
     }
     .book-progress-shell {
-      position: relative;
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      padding: 16px 18px 56px;
-      margin-top: 2px;
-      background: color-mix(in srgb, var(--surface-strong) 78%, var(--surface-soft) 22%);
-      min-height: 126px;
+      margin-top: 4px;
+      display: grid;
+      gap: 8px;
+      padding: 0 2px;
     }
     .book-progress-head {
       display: flex;
@@ -623,7 +620,7 @@
       gap: 14px;
       font-size: clamp(1.02rem, 4.2vw, 1.13rem);
       font-weight: 500;
-      margin-bottom: 12px;
+      margin-bottom: 0;
     }
     .book-progress-head span:last-child {
       color: var(--text);
@@ -634,23 +631,6 @@
       padding: 0;
       accent-color: color-mix(in srgb, var(--primary) 84%, #dad4eb 16%);
       opacity: 0.95;
-    }
-    .book-play-main {
-      position: absolute;
-      left: 50%;
-      bottom: -6px;
-      transform: translateX(-50%);
-      width: 56px;
-      height: 56px;
-      padding: 0;
-      border-radius: 999px;
-      border: 2px solid color-mix(in srgb, var(--text) 48%, transparent);
-      color: color-mix(in srgb, var(--text) 96%, transparent);
-      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
-      cursor: pointer;
-      box-shadow: 0 6px 14px rgba(92, 83, 122, 0.1);
-      display: grid;
-      place-items: center;
     }
     .book-delete-btn {
       position: absolute;
@@ -672,13 +652,6 @@
       width: 18px;
       height: 18px;
       flex: none;
-    }
-    .book-play-main .book-control-icon {
-      width: 16px;
-      height: 16px;
-      margin-left: 2px;
-      fill: currentColor;
-      stroke: none;
     }
     .book-delete-btn .book-control-icon {
       width: 17px;
@@ -786,7 +759,6 @@
     }
     [data-theme="dark"] .segmented-toggle button.active,
     [data-theme="dark"] .library-action-btn,
-    [data-theme="dark"] .book-play-main,
     [data-theme="dark"] .book-delete-btn,
     [data-theme="dark"] .upload-book-tile .upload-plus {
       background: color-mix(in srgb, var(--surface-strong) 88%, var(--surface-soft) 12%);
@@ -822,19 +794,11 @@
         font-size: 0.88rem;
       }
       .book-progress-shell {
-        border-radius: 18px;
-        min-height: 96px;
-        padding: 12px 14px 46px;
+        padding: 0;
       }
       .book-progress-head {
-        margin-bottom: 8px;
         font-size: 0.92rem;
         gap: 8px;
-      }
-      .book-play-main {
-        width: 44px;
-        height: 44px;
-        bottom: -6px;
       }
       .book-delete-btn {
         width: 32px;
@@ -855,11 +819,7 @@
       .segmented-toggle button { padding-inline: 12px; }
       .theme-toggle-small button { min-height: 38px; font-size: 0.85rem; }
       .book-tile { padding: 14px 14px 28px; }
-      .book-progress-shell { padding: 15px 16px 52px; }
-      .book-play-main {
-        width: 54px;
-        height: 54px;
-      }
+      .book-progress-shell { padding: 0; }
       .book-delete-btn {
         width: 38px;
         height: 38px;
@@ -2991,7 +2951,6 @@
                     <span>${rightLabel}</span>
                   </div>
                   <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
-                  <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5v11l9-5.5z"></path></svg></button>
                 </div>
                 <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.5h15"></path><path d="M9.5 3.75h5"></path><path d="M8 7.5v10.25a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7.5"></path><path d="M10.25 10.5v4.75"></path><path d="M13.75 10.5v4.75"></path></svg></button>
               </article>`;
