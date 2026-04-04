@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>JP Reader</title>
   <style>
     :root {
@@ -552,6 +552,9 @@
       background: transparent;
       cursor: pointer;
     }
+    .book-cover-shell {
+      position: relative;
+    }
     .book-cover-wrap {
       position: relative;
       display: block;
@@ -568,8 +571,8 @@
       display: block;
       border: 0;
       border-radius: 0;
-      object-fit: cover;
-      object-position: center top;
+      object-fit: contain;
+      object-position: center;
       background: transparent;
     }
     .book-header {
@@ -630,7 +633,7 @@
     .book-play-main {
       position: absolute;
       left: 50%;
-      bottom: -14px;
+      bottom: -18px;
       transform: translateX(-50%);
       width: 56px;
       height: 56px;
@@ -646,8 +649,8 @@
     }
     .book-delete-btn {
       position: absolute;
-      right: 14px;
-      bottom: 12px;
+      right: -10px;
+      top: -10px;
       width: 40px;
       height: 40px;
       padding: 0;
@@ -826,13 +829,13 @@
       .book-play-main {
         width: 44px;
         height: 44px;
-        bottom: -12px;
+        bottom: -14px;
       }
       .book-delete-btn {
         width: 32px;
         height: 32px;
-        right: 10px;
-        bottom: 9px;
+        right: -8px;
+        top: -8px;
       }
       .book-delete-btn .book-control-icon {
         width: 14px;
@@ -855,8 +858,8 @@
       .book-delete-btn {
         width: 38px;
         height: 38px;
-        right: 12px;
-        bottom: 11px;
+        right: -8px;
+        top: -8px;
       }
     }
   </style>
@@ -1559,7 +1562,7 @@
         document.body.appendChild(host);
       }
       host.style.width = `${context.width}px`;
-      host.innerHTML = `<div class="reader-content" style="width:${context.width}px;--reader-font-size:${state.settings.fontSize}px;"><div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text" id="paginationMeasureInner"></div></div></div>`;
+      host.innerHTML = `<div class="reader-content" style="width:${context.width}px;font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;"><div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text" id="paginationMeasureInner"></div></div></div>`;
       return host.querySelector('#paginationMeasureInner');
     }
 
@@ -2910,6 +2913,19 @@
       return dbGet(STORES.progress, bookId);
     }
 
+    function randomSlug(size = 6) {
+      const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let out = '';
+      for (let i = 0; i < size; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+      return out;
+    }
+
+    function buildRandomRefreshUrl() {
+      const url = new URL(window.location.href);
+      url.searchParams.set(randomSlug(), randomSlug());
+      return url.toString();
+    }
+
     async function renderLibraryView() {
       state.route = 'library';
       state.vocabView.loadMoreObserver?.disconnect();
@@ -2928,7 +2944,7 @@
                 <div id="libraryActionsMenu" class="library-actions-menu hidden">
                   <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
                   <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
-                  <button id="refreshStaticCacheBtn" class="library-action-btn" title="Refrescar caché de recursos estáticos">Refrescar</button>
+                  <a id="refreshStaticCacheBtn" class="library-action-btn" href="${buildRandomRefreshUrl()}" title="Recargar portada">Refrescar</a>
                 </div>
               </div>
             </h1>
@@ -2951,9 +2967,12 @@
             const rightLabel = `Pág ${currentPage}/${totalPages}`;
             return `
               <article class="book-tile">
-                <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
-                  <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title || b.fileName)}" />` : `<div class="cover"></div>`}</div>
-                </button>
+                <div class="book-cover-shell">
+                  <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
+                    <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title || b.fileName)}" />` : `<div class="cover"></div>`}</div>
+                  </button>
+                  <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5v11l9-5.5z"></path></svg></button>
+                </div>
                 <div class="book-header">
                   <h2 class="book-title">
                     <button class="book-title-btn" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
@@ -2964,11 +2983,10 @@
                 </div>
                 <div class="book-progress-shell">
                   <div class="book-progress-head">
-                    <span>Progreso aprox.: ${percent}</span>
+                    <span>${percent}</span>
                     <span>${rightLabel}</span>
                   </div>
                   <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
-                  <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5v11l9-5.5z"></path></svg></button>
                   <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.5h15"></path><path d="M9.5 3.75h5"></path><path d="M8 7.5v10.25a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7.5"></path><path d="M10.25 10.5v4.75"></path><path d="M13.75 10.5v4.75"></path></svg></button>
                 </div>
               </article>`;
@@ -3056,17 +3074,7 @@
         closeLibraryMenu();
         $('#dictPackInput')?.click();
       });
-      $('#refreshStaticCacheBtn').addEventListener('click', async () => {
-        closeLibraryMenu();
-        try {
-          await refreshStaticResourcesCache();
-          state.dictionaryStatus.importMessage = 'Caché de recursos estáticos refrescada.';
-        } catch (err) {
-          console.error(err);
-          state.dictionaryStatus.importMessage = `No se pudo refrescar la caché estática: ${err?.message || err}`;
-        }
-        renderLibraryView();
-      });
+      $('#refreshStaticCacheBtn').addEventListener('click', () => closeLibraryMenu());
       $('#dictPackInput').addEventListener('change', async (e) => {
         const files = [...(e.target.files || [])];
         if (!files.length) return;
@@ -3177,7 +3185,7 @@
             </div>
           </div>
           <div class="reader-content-wrap">
-            <div class="reader-content" style="--reader-font-size:${state.settings.fontSize}px;">${state.readingMode === 'page' ? renderPageMode(section, state.currentSpineIndex, initialContext) : renderSentenceMode(section)}</div>
+            <div class="reader-content" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">${state.readingMode === 'page' ? renderPageMode(section, state.currentSpineIndex, initialContext) : renderSentenceMode(section)}</div>
           </div>
         </div>
       `;
@@ -3201,10 +3209,12 @@
         setReadingMode(targetMode);
       });
       $('#fontSize').addEventListener('input', async (e) => {
-        await saveSettings({ fontSize: Number(e.target.value) });
+        const nextSize = Math.max(14, Math.min(30, Number(e.target.value) || 18));
+        state.settings.fontSize = nextSize;
         state.pageMapsCache.clear();
         state.pageSummariesCache.clear();
         renderReaderView({ alignToCurrentSentence: true });
+        await saveSettings({ fontSize: nextSize });
         await persistCurrentProgress();
       });
 
