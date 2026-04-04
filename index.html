@@ -559,7 +559,6 @@
     }
     .book-cover-shell {
       position: relative;
-      padding-bottom: 22px;
     }
     .book-cover-wrap {
       position: relative;
@@ -2977,7 +2976,6 @@
                   <button class="book-cover-button" data-open="${b.id}" aria-label="Abrir ${escapeHtml(b.title || b.fileName)}">
                     <div class="book-cover-wrap">${b.cover ? `<img class="cover" src="${b.cover}" alt="Portada de ${escapeHtml(b.title || b.fileName)}" />` : `<div class="cover"></div>`}</div>
                   </button>
-                  <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5v11l9-5.5z"></path></svg></button>
                 </div>
                 <div class="book-header">
                   <h2 class="book-title">
@@ -2993,6 +2991,7 @@
                     <span>${rightLabel}</span>
                   </div>
                   <input type="range" min="0" max="100" value="${Math.max(0, Math.min(100, pg?.percent || 0))}" disabled />
+                  <button class="book-play-main" data-open="${b.id}" title="Continuar lectura" aria-label="Continuar lectura"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5v11l9-5.5z"></path></svg></button>
                 </div>
                 <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.5h15"></path><path d="M9.5 3.75h5"></path><path d="M8 7.5v10.25a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7.5"></path><path d="M10.25 10.5v4.75"></path><path d="M13.75 10.5v4.75"></path></svg></button>
               </article>`;
@@ -3149,6 +3148,7 @@
 
     async function renderReaderView(options = {}) {
       const shouldAutoAlign = Boolean(options.alignToCurrentSentence);
+      const keepMenuOpen = Boolean(options.keepMenuOpen);
       if (!state.currentBook) return renderLibraryView();
       const app = $('#app');
       const section = state.sections[state.currentSpineIndex];
@@ -3214,12 +3214,15 @@
         const targetMode = state.readingMode === 'page' ? 'sentence' : 'page';
         setReadingMode(targetMode);
       });
+      if (keepMenuOpen) $('#readerMenu')?.classList.remove('hidden');
+
       $('#fontSize').addEventListener('input', async (e) => {
         const nextSize = Math.max(14, Math.min(30, Number(e.target.value) || 18));
         state.settings.fontSize = nextSize;
         state.pageMapsCache.clear();
         state.pageSummariesCache.clear();
-        renderReaderView({ alignToCurrentSentence: true });
+        const menuIsOpen = !$('#readerMenu')?.classList.contains('hidden');
+        renderReaderView({ alignToCurrentSentence: true, keepMenuOpen: menuIsOpen });
         await saveSettings({ fontSize: nextSize });
         await persistCurrentProgress();
       });
