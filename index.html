@@ -56,7 +56,7 @@
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
     .spacer { flex: 1; }
-    button, select, input[type="range"] {
+    button, select, input[type="range"], input[type="text"], input[type="search"], input[type="password"] {
       border: 1px solid var(--border);
       background: var(--surface);
       color: var(--text);
@@ -544,6 +544,25 @@
       border: 2px solid color-mix(in srgb, var(--text) 70%, transparent);
       background: transparent;
     }
+    .sentence-translation-result {
+      margin-top: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .sentence-translation-result.is-error {
+      color: var(--danger);
+    }
+    .sentence-translation-label {
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.25;
+    }
     .library-shell { display: grid; gap: 18px; }
     .library-card,
     .book-tile {
@@ -973,12 +992,15 @@
       dictionaryMeta: 'dictionaryMeta'
     };
     const SETTINGS_KEY = 'app_settings';
+    const AZURE_TRANSLATOR_ENDPOINT = 'https://api.cognitive.microsofttranslator.com';
     const DEFAULT_SETTINGS = {
       theme: 'light',
       fontSize: 18,
       showSegmentation: false,
       tokenDebug: false,
-      lastOpenedBookId: null
+      lastOpenedBookId: null,
+      azureTranslateKey: '',
+      azureTranslateRegion: ''
     };
 
     const state = {
@@ -1029,6 +1051,15 @@
         packsCount: 0,
         lastImportedAt: null,
         importMessage: ''
+      },
+      translationConfigStatus: '',
+      sentenceTranslation: {
+        bookId: null,
+        sectionIndex: null,
+        sentenceIndex: null,
+        status: 'idle',
+        translatedText: '',
+        error: ''
       }
     };
 
@@ -1260,6 +1291,102 @@
       state.settings = { ...state.settings, ...next };
       await dbPut(STORES.settings, { id: SETTINGS_KEY, value: state.settings });
       applyTheme(state.settings.theme);
+    }
+
+    function getAzureTranslatorConfig() {
+      return {
+        key: (state.settings.azureTranslateKey || '').trim(),
+        region: (state.settings.azureTranslateRegion || '').trim(),
+        endpoint: AZURE_TRANSLATOR_ENDPOINT
+      };
+    }
+
+    function hasAzureTranslatorConfig() {
+      const { key, region } = getAzureTranslatorConfig();
+      return Boolean(key && region);
+    }
+
+    function resetSentenceTranslation() {
+      state.sentenceTranslation = {
+        bookId: null,
+        sectionIndex: null,
+        sentenceIndex: null,
+        status: 'idle',
+        translatedText: '',
+        error: ''
+      };
+    }
+
+    function getSentenceTranslationViewModel(location) {
+      const translation = state.sentenceTranslation;
+      const matches = Boolean(
+        translation
+        && translation.bookId
+        && translation.bookId === state.currentBookId
+        && Number(translation.sectionIndex) === Number(location?.sectionIndex)
+        && Number(translation.sentenceIndex) === Number(location?.sentenceIndex)
+      );
+      if (!matches) return { visible: false, kind: 'empty', label: '', text: '' };
+      if (translation.status === 'loading') {
+        return { visible: true, kind: 'loading', label: 'Azure Translator', text: 'Traduciendo…' };
+      }
+      if (translation.status === 'success') {
+        return { visible: true, kind: 'success', label: 'Azure Translator (ja → es)', text: translation.translatedText || '' };
+      }
+      if (translation.status === 'error') {
+        return { visible: true, kind: 'error', label: 'Azure Translator', text: translation.error || 'No se pudo traducir la oración.' };
+      }
+      return { visible: false, kind: 'empty', label: '', text: '' };
+    }
+
+    function renderSentenceTranslationResult(location, options = {}) {
+      if (options.preview) return '';
+      const view = getSentenceTranslationViewModel(location);
+      return `
+        <div id="sentenceTranslationResult" class="sentence-translation-result ${view.visible ? '' : 'hidden'} ${view.kind === 'error' ? 'is-error' : ''}" aria-live="polite">
+          ${view.visible ? `${view.label ? `<div class="sentence-translation-label">${escapeHtml(view.label)}</div>` : ''}<div>${escapeHtml(view.text)}</div>` : ''}
+        </div>
+      `;
+    }
+
+    function refreshCurrentSentenceTranslationResult() {
+      const host = $('#sentenceTranslationResult');
+      if (!host || state.readingMode !== 'sentence') return;
+      const location = getNormalizedReaderLocation({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex });
+      const view = getSentenceTranslationViewModel(location);
+      host.classList.toggle('hidden', !view.visible);
+      host.classList.toggle('is-error', view.kind === 'error');
+      host.innerHTML = view.visible
+        ? `${view.label ? `<div class="sentence-translation-label">${escapeHtml(view.label)}</div>` : ''}<div>${escapeHtml(view.text)}</div>`
+        : '';
+    }
+
+    async function translateSentenceWithAzure(textToTranslate) {
+      const { key, region, endpoint } = getAzureTranslatorConfig();
+      if (!key || !region) throw new Error('Configura tu clave y región en Traducciones antes de traducir.');
+      const response = await fetch(`${endpoint}/translate?api-version=3.0&from=ja&to=es`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Ocp-Apim-Subscription-Key': key,
+          'Ocp-Apim-Subscription-Region': region
+        },
+        body: JSON.stringify([{ Text: textToTranslate }])
+      });
+      let payload = null;
+      const raw = await response.text();
+      if (raw) {
+        try { payload = JSON.parse(raw); } catch { payload = raw; }
+      }
+      if (!response.ok) {
+        const message = typeof payload === 'string'
+          ? payload
+          : payload?.error?.message || payload?.message || `Error ${response.status} al traducir.`;
+        throw new Error(message);
+      }
+      const translatedText = payload?.[0]?.translations?.[0]?.text || '';
+      if (!translatedText) throw new Error('Azure no devolvió ninguna traducción.');
+      return translatedText;
     }
 
     // =========================
@@ -2637,6 +2764,7 @@
       state.pageSummariesCache.clear();
       state.flatSentenceEntriesCache = null;
       state.flatSentenceIndexLookupCache = null;
+      resetSentenceTranslation();
 
       await dbPut(STORES.books, { ...book, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       await saveSettings({ lastOpenedBookId: bookId });
@@ -2973,6 +3101,62 @@
       resetVocabularyListRender();
     }
 
+    async function renderTranslationsView() {
+      state.route = 'translations';
+      syncDocumentScrollLock();
+      const app = $('#app');
+      const keyValue = state.settings.azureTranslateKey || '';
+      const regionValue = state.settings.azureTranslateRegion || '';
+      const isConfigured = hasAzureTranslatorConfig();
+      app.innerHTML = `
+        <div class="library-shell">
+          <div class="library-card">
+            <div class="toolbar" style="margin-bottom:0;">
+              <button id="backLibraryFromTranslationsBtn" class="library-action-btn" type="button">← Biblioteca</button>
+            </div>
+            <h1 class="library-headline" style="margin-top:14px;">
+              <span class="library-title">Traducciones</span>
+            </h1>
+            <div class="library-toolbar">
+              <div class="reader-menu-section">
+                <label for="azureTranslateKeyInput"><strong>Clave de Azure Translator</strong></label>
+                <input id="azureTranslateKeyInput" type="password" value="${escapeHtml(keyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
+              </div>
+              <div class="reader-menu-section">
+                <label for="azureTranslateRegionInput"><strong>Región</strong></label>
+                <input id="azureTranslateRegionInput" type="text" value="${escapeHtml(regionValue)}" placeholder="Ejemplo: westeurope" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                <div class="field-help">Endpoint fijo: ${escapeHtml(AZURE_TRANSLATOR_ENDPOINT)}/</div>
+              </div>
+              <div class="library-actions-row">
+                <button id="saveTranslationsConfigBtn" class="library-action-btn" type="button">Guardar</button>
+                <button id="clearTranslationsConfigBtn" class="library-action-btn" type="button">Borrar</button>
+              </div>
+            </div>
+            <p class="status library-status">${escapeHtml(state.translationConfigStatus || (isConfigured ? 'Configuración de Azure Translator lista.' : 'Añade tu clave y tu región para traducir oraciones en modo frase.'))}</p>
+          </div>
+        </div>`;
+
+      $('#backLibraryFromTranslationsBtn')?.addEventListener('click', () => {
+        state.translationConfigStatus = '';
+        renderLibraryView();
+      });
+      $('#saveTranslationsConfigBtn')?.addEventListener('click', async () => {
+        const key = ($('#azureTranslateKeyInput')?.value || '').trim();
+        const region = ($('#azureTranslateRegionInput')?.value || '').trim();
+        await saveSettings({ azureTranslateKey: key, azureTranslateRegion: region });
+        state.translationConfigStatus = key && region
+          ? 'Configuración guardada localmente.'
+          : 'Configuración vacía guardada localmente.';
+        renderTranslationsView();
+      });
+      $('#clearTranslationsConfigBtn')?.addEventListener('click', async () => {
+        await saveSettings({ azureTranslateKey: '', azureTranslateRegion: '' });
+        state.translationConfigStatus = 'Configuración borrada.';
+        renderTranslationsView();
+      });
+    }
+
     // =========================
     // Renderizado UI + Router
     // =========================
@@ -3032,6 +3216,7 @@
                 <button id="libraryMenuToggleBtn" class="library-menu-toggle" type="button" aria-expanded="false" aria-controls="libraryActionsMenu" title="Abrir menú">☰</button>
                 <div id="libraryActionsMenu" class="library-actions-menu hidden">
                   <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
+                  <button id="openTranslationsBtn" class="library-action-btn">Traducciones</button>
                   <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
                   <a id="refreshStaticCacheBtn" class="library-action-btn" href="${buildRandomRefreshUrl()}" title="Recargar portada">Refrescar</a>
                 </div>
@@ -3155,6 +3340,10 @@
       $('#openVocabBtn').addEventListener('click', () => {
         closeLibraryMenu();
         renderVocabularyView();
+      });
+      $('#openTranslationsBtn')?.addEventListener('click', () => {
+        closeLibraryMenu();
+        renderTranslationsView();
       });
 
       app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
@@ -3286,6 +3475,7 @@
       const translateButtonAttrs = options.preview
         ? 'class="icon-btn" style="font-size:1rem;padding:6px 0;" aria-hidden="true" tabindex="-1"'
         : 'id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;"';
+      const translationHtml = renderSentenceTranslationResult({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx }, options);
       return `
         <div class="${wrapperClass}" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">
           <div class="sentence-hero${options.preview ? ' sentence-hero-preview' : ''}"${options.preview ? ' aria-hidden="true"' : ''}>
@@ -3294,6 +3484,7 @@
           <div class="sentence-box">${sentenceHtml}</div>
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
           <button ${translateButtonAttrs}>Traducir oración</button>
+          ${translationHtml}
         </div>
       `;
     }
@@ -3448,14 +3639,41 @@
             || '';
           speakNativeTts(currentSentence, { lang: 'ja-JP' });
         });
-        $('#translateSentenceBtn')?.addEventListener('click', () => {
+        $('#translateSentenceBtn')?.addEventListener('click', async () => {
           const currentSentence = getTokenizedSentence(state.currentBookId, state.currentSpineIndex, state.currentSentenceIndex)?.sentence
             || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
             || '';
           if (!currentSentence.trim()) return;
-          const prompt = `Traduce: “${currentSentence}”`;
-          const url = 'https://chatgpt.com/?q=' + encodeURIComponent(prompt);
-          window.open(url, '_blank', 'noopener,noreferrer');
+          state.sentenceTranslation = {
+            bookId: state.currentBookId,
+            sectionIndex: state.currentSpineIndex,
+            sentenceIndex: state.currentSentenceIndex,
+            status: 'loading',
+            translatedText: '',
+            error: ''
+          };
+          refreshCurrentSentenceTranslationResult();
+          try {
+            const translatedText = await translateSentenceWithAzure(currentSentence);
+            state.sentenceTranslation = {
+              bookId: state.currentBookId,
+              sectionIndex: state.currentSpineIndex,
+              sentenceIndex: state.currentSentenceIndex,
+              status: 'success',
+              translatedText,
+              error: ''
+            };
+          } catch (err) {
+            state.sentenceTranslation = {
+              bookId: state.currentBookId,
+              sectionIndex: state.currentSpineIndex,
+              sentenceIndex: state.currentSentenceIndex,
+              status: 'error',
+              translatedText: '',
+              error: err?.message || 'No se pudo traducir la oración.'
+            };
+          }
+          refreshCurrentSentenceTranslationResult();
         });
         $('#currentReaderPanel .sentence-box')?.addEventListener('click', async (e) => {
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
