@@ -3280,16 +3280,20 @@
         ? renderSegmentedSentence(tokenized, { segmented: state.settings.showSegmentation })
         : escapeHtml(sentence);
       const wrapperClass = options.preview ? 'reader-preview-content' : 'reader-content';
+      const playButtonAttrs = options.preview
+        ? 'class="play-main" title="Reproducir oración" aria-hidden="true" tabindex="-1"'
+        : 'id="playSentenceBtn" class="play-main" title="Reproducir oración"';
+      const translateButtonAttrs = options.preview
+        ? 'class="icon-btn" style="font-size:1rem;padding:6px 0;" aria-hidden="true" tabindex="-1"'
+        : 'id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;"';
       return `
         <div class="${wrapperClass}" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">
-          ${options.preview ? '<div class="sentence-hero sentence-hero-preview" aria-hidden="true"></div>' : `
-            <div class="sentence-hero">
-              <button id="playSentenceBtn" class="play-main" title="Reproducir oración">▶</button>
-            </div>
-          `}
+          <div class="sentence-hero${options.preview ? ' sentence-hero-preview' : ''}"${options.preview ? ' aria-hidden="true"' : ''}>
+            <button ${playButtonAttrs}>▶</button>
+          </div>
           <div class="sentence-box">${sentenceHtml}</div>
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
-          ${options.preview ? '' : '<button id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;">Traducir oración</button>'}
+          <button ${translateButtonAttrs}>Traducir oración</button>
         </div>
       `;
     }
