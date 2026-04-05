@@ -366,9 +366,13 @@
     .segmented-line.compact .token { border-bottom-color: transparent; }
     .token.known-level-1 { border-bottom-color: transparent; background: #fef08a; }
     .token.known-level-2 {
-      border-bottom-color: currentColor;
-      border-bottom-width: 2px;
+      border-bottom-color: transparent;
       background: transparent;
+      text-decoration-line: underline;
+      text-decoration-style: dotted;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 0.16em;
+      text-decoration-color: color-mix(in srgb, currentColor 78%, transparent);
     }
     .token.known-level-3 { border-bottom-color: transparent; background: transparent; }
     .token.known-level-4 { border-bottom-color: transparent; background: transparent; }
