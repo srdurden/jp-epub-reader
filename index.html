@@ -416,7 +416,7 @@
       overflow: auto;
       pointer-events: auto;
     }
-    .token-panel h3 { margin: 0; font-size: 1.05rem; }
+    .token-panel h3 { margin: 0; font-size: 1.55rem; line-height: 1.1; }
     .token-lemma-line {
       margin-top: 2px;
       color: var(--muted);
@@ -482,6 +482,16 @@
     }
     .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
     .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
+    .level-btn.level-checkmark {
+      color: #16a34a;
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+    .level-btn.level-checkmark.active {
+      background: color-mix(in srgb, #16a34a 12%, var(--surface));
+      color: #16a34a;
+      border-color: #16a34a;
+    }
     .vocab-list { display: grid; gap: 10px; }
     .vocab-item {
       position: relative;
@@ -2165,13 +2175,13 @@
             ` : ''}
           </div>
           <div class="external-links-row">
-            <button id="askChatgptBtn" class="chatgpt-btn">chatgpt</button>
+            <button id="askChatgptBtn" class="chatgpt-btn">ChatGPT</button>
             <button id="openGoogleTranslateBtn" class="chatgpt-btn">Google Translate</button>
           </div>
           <footer class="token-panel-footer">
             <div class="level-picker" aria-label="Nivel de conocimiento">
-              ${[1,2,3].map((lvl) => `<button class="level-btn ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl}</button>`).join('')}
               <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
+              ${[1,2,3].map((lvl) => `<button class="level-btn ${lvl === 3 ? 'level-checkmark' : ''} ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl === 3 ? '✓' : lvl}</button>`).join('')}
             </div>
           </footer>
         </aside>
