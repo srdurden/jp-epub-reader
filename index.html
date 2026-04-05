@@ -145,6 +145,37 @@
       gap: 10px;
       margin: 6px 0 2px;
     }
+    .reader-progress-shell {
+      position: relative;
+      padding-top: 28px;
+    }
+    .reader-progress-bubble {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: translateX(-50%) translateY(4px) scale(0.96);
+      transform-origin: center bottom;
+      background: #4caf5a;
+      color: #fff;
+      border-radius: 999px;
+      padding: 7px 14px;
+      min-width: 86px;
+      text-align: center;
+      font-size: 0.98rem;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.01em;
+      box-shadow: 0 10px 24px rgba(22, 163, 74, 0.24);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 140ms ease, transform 140ms ease;
+      white-space: nowrap;
+      z-index: 2;
+    }
+    .reader-progress-bubble.is-visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
     .reader-progress input[type="range"] {
       width: 100%;
       padding: 0;
@@ -3554,7 +3585,10 @@
               <button id="openReaderMenuBtn" title="Menú" aria-label="Menú">☰<span>Menú</span></button>
             </div>
             <div class="reader-progress">
-              <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
+              <div class="reader-progress-shell" id="pageProgressShell">
+                <div id="pageProgressPreview" class="reader-progress-bubble" aria-hidden="true">${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</div>
+                <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
+              </div>
             </div>
             <div id="readerMenu" class="toolbar reader-menu hidden">
               <div class="reader-menu-section reader-status-strip">
@@ -3581,6 +3615,52 @@
         <div id="tokenPanelHost"></div>
       `;
 
+      const pageProgressInput = $('#pageProgress');
+      const pageProgressBubble = $('#pageProgressPreview');
+      const pageProgressShell = $('#pageProgressShell');
+      let hidePageProgressPreviewTimer = null;
+
+      const getPageProgressPreviewMetrics = () => {
+        const min = Number(pageProgressInput?.min) || 0;
+        const max = Number(pageProgressInput?.max) || 0;
+        const value = Math.max(min, Math.min(max, Number(pageProgressInput?.value) || 0));
+        const total = Math.max((max - min) + 1, 1);
+        const current = Math.max(1, Math.min(total, (value - min) + 1));
+        const ratio = max > min ? (value - min) / (max - min) : 0;
+        const inputWidth = pageProgressInput?.getBoundingClientRect().width || pageProgressShell?.getBoundingClientRect().width || 1;
+        const estimatedThumbWidth = Math.min(28, Math.max(20, inputWidth * 0.055));
+        const left = ratio * Math.max(inputWidth - estimatedThumbWidth, 0) + (estimatedThumbWidth / 2);
+        return { current, total, left };
+      };
+
+      const updatePageProgressPreview = (visible = false) => {
+        if (!pageProgressInput || !pageProgressBubble) return;
+        const { current, total, left } = getPageProgressPreviewMetrics();
+        pageProgressBubble.textContent = `${current}/${total}`;
+        pageProgressBubble.style.left = `${left}px`;
+        pageProgressBubble.classList.toggle('is-visible', Boolean(visible));
+      };
+
+      const showPageProgressPreview = () => {
+        clearTimeout(hidePageProgressPreviewTimer);
+        updatePageProgressPreview(true);
+      };
+
+      const hidePageProgressPreview = (delay = 0) => {
+        clearTimeout(hidePageProgressPreviewTimer);
+        if (!pageProgressBubble) return;
+        if (delay > 0) {
+          hidePageProgressPreviewTimer = window.setTimeout(() => {
+            pageProgressBubble.classList.remove('is-visible');
+          }, delay);
+          return;
+        }
+        pageProgressBubble.classList.remove('is-visible');
+      };
+
+      updatePageProgressPreview(false);
+      requestAnimationFrame(() => updatePageProgressPreview(false));
+
       $('#readerExitBtn').addEventListener('click', async () => {
         closeTokenPanel();
         await persistCurrentProgress();
@@ -3588,7 +3668,17 @@
         renderLibraryView();
       });
       $('#openReaderMenuBtn').addEventListener('click', () => $('#readerMenu')?.classList.toggle('hidden'));
-      $('#pageProgress').addEventListener('change', async (e) => {
+      pageProgressInput?.addEventListener('input', showPageProgressPreview);
+      pageProgressInput?.addEventListener('pointerdown', showPageProgressPreview);
+      pageProgressInput?.addEventListener('touchstart', showPageProgressPreview, { passive: true });
+      pageProgressInput?.addEventListener('focus', showPageProgressPreview);
+      pageProgressInput?.addEventListener('pointerup', () => hidePageProgressPreview(220));
+      pageProgressInput?.addEventListener('mouseup', () => hidePageProgressPreview(220));
+      pageProgressInput?.addEventListener('touchend', () => hidePageProgressPreview(220));
+      pageProgressInput?.addEventListener('keyup', () => hidePageProgressPreview(220));
+      pageProgressInput?.addEventListener('blur', () => hidePageProgressPreview());
+      pageProgressInput?.addEventListener('change', async (e) => {
+        showPageProgressPreview();
         goToGlobalPage(Number(e.target.value));
         await persistCurrentProgress();
         renderReaderView({ alignToCurrentSentence: true });
