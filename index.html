@@ -427,9 +427,9 @@
     }
     #userDefinitionInput {
       min-height: 2.3em;
-      height: 2.3em;
-      resize: both;
-      overflow: auto;
+      height: auto;
+      resize: vertical;
+      overflow: hidden;
     }
     #saveUserDefinitionBtn {
       background: #fff;
@@ -2040,8 +2040,16 @@
         applyFamiliarityStyles(updated.vocabKey, updated.familiarityLevel);
         closeTokenPanel();
       }));
-      $('#userDefinitionInput')?.addEventListener('input', (e) => {
+      const userDefinitionInput = $('#userDefinitionInput');
+      const autoGrowUserDefinitionInput = () => {
+        if (!userDefinitionInput) return;
+        userDefinitionInput.style.height = 'auto';
+        userDefinitionInput.style.height = `${userDefinitionInput.scrollHeight}px`;
+      };
+      autoGrowUserDefinitionInput();
+      userDefinitionInput?.addEventListener('input', (e) => {
         state.tokenSelection.userDefinitionDraft = e.target.value || '';
+        autoGrowUserDefinitionInput();
       });
       $('#saveUserDefinitionBtn')?.addEventListener('click', async () => {
         const text = $('#userDefinitionInput')?.value || '';
