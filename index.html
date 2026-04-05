@@ -1992,6 +1992,12 @@
           </div>
           <div class="token-grid">
             <span class="v">${escapeHtml(dictionaryDefinition)}</span>
+            <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
+              <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:start;">
+                <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
+                <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
+              </div>
+            </div>
             ${hasUserDefinition ? `
               <div class="v custom-definition-row">
                 <span class="custom-definition-actions">
@@ -2001,13 +2007,6 @@
                 <span>${escapeHtml(entry.userDefinition)}</span>
               </div>
             ` : ''}
-          </div>
-          <div style="margin-top:8px; ${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
-            <label for="userDefinitionInput"><strong>Nota personal</strong></label>
-            <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:start;">
-              <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
-              <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
-            </div>
           </div>
           <div class="external-links-row">
             <button id="askChatgptBtn" class="chatgpt-btn">chatgpt</button>
