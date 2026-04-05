@@ -545,11 +545,10 @@
       background: transparent;
     }
     .sentence-translation-result {
-      margin-top: 10px;
-      padding: 12px 14px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
+      margin-top: 8px;
+      padding: 0;
+      border: 0;
+      background: transparent;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-word;
@@ -557,12 +556,7 @@
     .sentence-translation-result.is-error {
       color: var(--danger);
     }
-    .sentence-translation-label {
-      margin-bottom: 4px;
-      color: var(--muted);
-      font-size: 0.82rem;
-      line-height: 1.25;
-    }
+    .sentence-translation-label { display: none; }
     .library-shell { display: grid; gap: 18px; }
     .library-card,
     .book-tile {
@@ -1328,13 +1322,13 @@
       );
       if (!matches) return { visible: false, kind: 'empty', label: '', text: '' };
       if (translation.status === 'loading') {
-        return { visible: true, kind: 'loading', label: 'Azure Translator', text: 'Traduciendo…' };
+        return { visible: true, kind: 'loading', label: '', text: 'Traduciendo…' };
       }
       if (translation.status === 'success') {
-        return { visible: true, kind: 'success', label: 'Azure Translator (ja → es)', text: translation.translatedText || '' };
+        return { visible: true, kind: 'success', label: '', text: translation.translatedText || '' };
       }
       if (translation.status === 'error') {
-        return { visible: true, kind: 'error', label: 'Azure Translator', text: translation.error || 'No se pudo traducir la oración.' };
+        return { visible: true, kind: 'error', label: '', text: translation.error || 'No se pudo traducir la oración.' };
       }
       return { visible: false, kind: 'empty', label: '', text: '' };
     }
@@ -1344,7 +1338,7 @@
       const view = getSentenceTranslationViewModel(location);
       return `
         <div id="sentenceTranslationResult" class="sentence-translation-result ${view.visible ? '' : 'hidden'} ${view.kind === 'error' ? 'is-error' : ''}" aria-live="polite">
-          ${view.visible ? `${view.label ? `<div class="sentence-translation-label">${escapeHtml(view.label)}</div>` : ''}<div>${escapeHtml(view.text)}</div>` : ''}
+          ${view.visible ? escapeHtml(view.text) : ''}
         </div>
       `;
     }
@@ -1357,7 +1351,7 @@
       host.classList.toggle('hidden', !view.visible);
       host.classList.toggle('is-error', view.kind === 'error');
       host.innerHTML = view.visible
-        ? `${view.label ? `<div class="sentence-translation-label">${escapeHtml(view.label)}</div>` : ''}<div>${escapeHtml(view.text)}</div>`
+        ? escapeHtml(view.text)
         : '';
     }
 
