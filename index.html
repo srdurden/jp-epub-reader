@@ -3586,7 +3586,7 @@
             </div>
             <div class="reader-progress">
               <div class="reader-progress-shell" id="pageProgressShell">
-                <div id="pageProgressPreview" class="reader-progress-bubble" aria-hidden="true">${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</div>
+                <div id="pageProgressPreview" class="reader-progress-bubble" aria-hidden="true">Pag. ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</div>
                 <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
               </div>
             </div>
@@ -3636,7 +3636,7 @@
       const updatePageProgressPreview = (visible = false) => {
         if (!pageProgressInput || !pageProgressBubble) return;
         const { current, total, left } = getPageProgressPreviewMetrics();
-        pageProgressBubble.textContent = `${current}/${total}`;
+        pageProgressBubble.textContent = `Pag. ${current}/${total}`;
         pageProgressBubble.style.left = `${left}px`;
         pageProgressBubble.classList.toggle('is-visible', Boolean(visible));
       };
