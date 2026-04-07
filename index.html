@@ -602,6 +602,41 @@
       color: var(--danger);
     }
     .sentence-translation-label { display: none; }
+    .copy-glyph-btn {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 2px 4px;
+      font-size: 0.8rem;
+      line-height: 1;
+      cursor: pointer;
+      border-radius: 8px;
+      min-width: auto;
+    }
+    .copy-glyph-btn:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--border) 45%, transparent);
+    }
+    .copy-glyph-btn.is-copied {
+      color: #16a34a;
+      background: color-mix(in srgb, #16a34a 18%, transparent);
+      transform: scale(1.08);
+    }
+    .sentence-copy-wrap {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 4px;
+      width: 100%;
+    }
+    .sentence-copy-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .token-panel-headword {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
     .library-shell { display: grid; gap: 18px; }
     .library-card,
     .book-tile {
@@ -2196,6 +2231,38 @@
       return attachTokenMetadata(token);
     }
 
+    async function copyTextToClipboard(text) {
+      const plainText = String(text ?? '');
+      if (!plainText) return false;
+      try {
+        await navigator.clipboard.writeText(plainText);
+        return true;
+      } catch (err) {
+        const textarea = document.createElement('textarea');
+        textarea.value = plainText;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return ok;
+      }
+    }
+
+    function showCopyFeedback(button) {
+      if (!button) return;
+      const originalLabel = button.dataset.copyOriginalLabel || button.textContent || '⧉';
+      button.dataset.copyOriginalLabel = originalLabel;
+      button.classList.add('is-copied');
+      button.textContent = '✓';
+      window.setTimeout(() => {
+        button.classList.remove('is-copied');
+        button.textContent = originalLabel;
+      }, 650);
+    }
+
     function renderTokenPanel() {
       const host = $('#tokenPanelHost');
       if (!host) return;
@@ -2217,7 +2284,10 @@
           <div class="token-panel-handle" aria-hidden="true"></div>
           <div class="toolbar" style="margin-bottom: 8px; align-items: center;">
             <div>
-              <h3>${escapeHtml(displaySurface)}</h3>
+              <div class="token-panel-headword">
+                <button id="copyTokenSurfaceBtn" class="copy-glyph-btn" title="Copiar palabra" aria-label="Copiar palabra">⧉</button>
+                <h3>${escapeHtml(displaySurface)}</h3>
+              </div>
               ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span></div>` : ''}
             </div>
             <div class="spacer"></div>
@@ -2368,6 +2438,10 @@
         touchVocabularyData();
         applyFamiliarityStyles(entry.vocabKey, null);
         closeTokenPanel();
+      });
+      $('#copyTokenSurfaceBtn')?.addEventListener('click', async () => {
+        const copied = await copyTextToClipboard(displaySurface);
+        if (copied) showCopyFeedback($('#copyTokenSurfaceBtn'));
       });
       host.querySelector('[data-close-token-panel="1"]')?.addEventListener('click', closeTokenPanel);
     }
@@ -3690,12 +3764,20 @@
         ? 'class="icon-btn" style="font-size:1rem;padding:6px 0;" aria-hidden="true" tabindex="-1"'
         : 'id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;"';
       const translationHtml = renderSentenceTranslationResult({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx }, options);
+      const copySentenceAttrs = options.preview
+        ? 'class="copy-glyph-btn" title="Copiar frase" aria-hidden="true" tabindex="-1"'
+        : 'id="copySentenceBtn" class="copy-glyph-btn" title="Copiar frase" aria-label="Copiar frase"';
       return `
         <div class="${wrapperClass}" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">
           <div class="sentence-hero${options.preview ? ' sentence-hero-preview' : ''}"${options.preview ? ' aria-hidden="true"' : ''}>
             <button ${playButtonAttrs}>▶</button>
           </div>
-          <div class="sentence-box">${sentenceHtml}</div>
+          <div class="sentence-box">
+            <span class="sentence-copy-wrap">
+              <button ${copySentenceAttrs}>⧉</button>
+              <span class="sentence-copy-text">${sentenceHtml}</span>
+            </span>
+          </div>
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
           <button ${translateButtonAttrs}>Traducir oración</button>
           ${translationHtml}
@@ -3947,6 +4029,14 @@
             };
           }
           refreshCurrentSentenceTranslationResult();
+        });
+        $('#copySentenceBtn')?.addEventListener('click', async () => {
+          const currentSentence = getTokenizedSentence(state.currentBookId, state.currentSpineIndex, state.currentSentenceIndex)?.sentence
+            || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
+            || '';
+          if (!currentSentence.trim()) return;
+          const copied = await copyTextToClipboard(currentSentence.replace(/\s+/gu, ''));
+          if (copied) showCopyFeedback($('#copySentenceBtn'));
         });
         $('#currentReaderPanel .sentence-box')?.addEventListener('click', async (e) => {
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
