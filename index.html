@@ -2365,7 +2365,7 @@
                 <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
                 <span class="custom-definition-actions">
                   <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
-                  <button id="askGeminiDefinitionBtn" class="primary" title="Consultar Gemini">?</button>
+                  <button id="askGeminiDefinitionBtn" class="primary" title="Consultar Gemini">✨</button>
                 </span>
               </div>
             </div>
@@ -2433,7 +2433,7 @@
           return;
         }
         if (!input) return;
-        const previousLabel = actionBtn?.textContent || '?';
+        const previousLabel = actionBtn?.textContent || '✨';
         const previousDraft = input.value || '';
         const finalPrompt = `${prompt || DEFAULT_GEMINI_PROMPT}${promptWord}`;
         try {
