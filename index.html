@@ -1032,7 +1032,7 @@
     };
     const SETTINGS_KEY = 'app_settings';
     const AZURE_TRANSLATOR_ENDPOINT = 'https://api.cognitive.microsofttranslator.com';
-    const DEFAULT_GEMINI_MODEL = 'gemini-flash-lite-latest';
+    const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
     const DEFAULT_GEMINI_PROMPT = 'Responde únicamente repitiendo la palabra + la palabra en hiragana entre parentesis + la definición en castellano ( por ej.  "仕方ない - しかたない  - No se puede evitar / No hay remedio"). La palabra a definir ahora es: ';
     const DEFAULT_SETTINGS = {
       theme: 'light',
@@ -3329,7 +3329,7 @@
               </div>
               <div class="reader-menu-section">
                 <label for="geminiModelInput"><strong>Modelo</strong></label>
-                <input id="geminiModelInput" type="text" value="${escapeHtml(modelValue)}" placeholder="gemini-flash-lite-latest" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                <input id="geminiModelInput" type="text" value="${escapeHtml(modelValue)}" placeholder="gemini-3.1-flash-lite-preview" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
               </div>
               <div class="reader-menu-section">
                 <label for="geminiPromptInput"><strong>Prompt</strong></label>
@@ -3357,7 +3357,7 @@
         state.geminiConfigStatus = apiKey
           ? 'Configuración guardada localmente.'
           : 'Configuración guardada sin clave API.';
-        renderGeminiView();
+        renderLibraryView();
       });
       $('#clearGeminiConfigBtn')?.addEventListener('click', async () => {
         await saveSettings({ geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL, geminiPrompt: DEFAULT_GEMINI_PROMPT });
