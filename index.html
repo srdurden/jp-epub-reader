@@ -453,7 +453,8 @@
       z-index: 3;
       width: min(560px, calc(100vw - 24px));
       max-height: min(82vh, 780px);
-      overflow: auto;
+      overflow-y: auto;
+      overflow-x: visible;
       pointer-events: auto;
     }
     .token-panel h3 { margin: 0; font-size: 1.55rem; line-height: 1.1; }
@@ -487,6 +488,10 @@
       font-weight: 400;
     }
     .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 0; justify-content: center; }
+    .token-panel-word-row {
+      margin: 18px 0 14px;
+      align-items: center;
+    }
     .token-panel-footer {
       margin-top: 12px;
       display: flex;
@@ -524,8 +529,8 @@
       width: fit-content;
     }
     .external-links-row {
-      margin-top: 12px;
-      padding-top: 10px;
+      margin-top: 18px;
+      padding-top: 16px;
       border-top: 1px solid #d1d5db;
       display: flex;
       gap: 8px;
@@ -533,10 +538,21 @@
     }
     .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
     .panel-close-btn {
-      min-width: 42px;
+      min-width: 34px;
+      width: 34px;
+      height: 34px;
+      padding: 0;
       font-size: 1.15rem;
       font-weight: 600;
       line-height: 1;
+      position: absolute;
+      top: -14px;
+      right: -10px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      box-shadow: var(--shadow-soft);
+      z-index: 4;
     }
     .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
     .level-btn.level-checkmark {
@@ -693,6 +709,25 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+    }
+    .token-panel-definition {
+      margin-top: 8px;
+    }
+    .custom-definition-input-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: start;
+    }
+    .gemini-icon-btn {
+      border: 0;
+      background: transparent;
+      color: var(--primary);
+      padding: 6px 4px;
+      min-width: auto;
+      font-size: 1.15rem;
+      line-height: 1;
+      cursor: pointer;
     }
     .library-shell { display: grid; gap: 18px; }
     .library-card,
@@ -2343,29 +2378,28 @@
               <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
             </div>
             <div class="level-picker" aria-label="Nivel de conocimiento">
-              ${[1,2,3].map((lvl) => `<button class="level-btn ${lvl === 3 ? 'level-checkmark' : ''} ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl === 3 ? '✓' : lvl}</button>`).join('')}
+              ${[1,2,3].map((lvl) => `<button class="level-btn ${lvl === 3 ? 'level-checkmark' : ''} ${(Number(draftLevel) >= lvl) ? 'active' : ''}" data-level="${lvl}">${lvl === 3 ? '✓' : lvl}</button>`).join('')}
             </div>
-            <div class="right-actions">
-              <button class="level-btn panel-close-btn" data-close-token-panel="1" title="Cerrar popup" aria-label="Cerrar popup">✕</button>
-            </div>
+            <div class="right-actions"></div>
           </div>
-          <div class="toolbar" style="margin-bottom: 8px; align-items: center;">
+          <button class="level-btn panel-close-btn" data-close-token-panel="1" title="Cerrar popup" aria-label="Cerrar popup">✕</button>
+          <div class="toolbar token-panel-word-row">
             <div>
               <div class="token-panel-headword">
-                <button id="copyTokenSurfaceBtn" class="copy-glyph-btn" title="Copiar palabra" aria-label="Copiar palabra">⧉</button>
                 <h3>${escapeHtml(displaySurface)}</h3>
+                <button id="copyTokenSurfaceBtn" class="copy-glyph-btn" title="Copiar palabra" aria-label="Copiar palabra">⧉</button>
               </div>
               ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span></div>` : ''}
             </div>
           </div>
           <div class="token-grid">
-            <span class="v">${escapeHtml(dictionaryDefinition)}</span>
+            <span class="v token-panel-definition">${escapeHtml(dictionaryDefinition)}</span>
             <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
-              <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:start;">
+              <div class="custom-definition-input-row">
+                <button id="askGeminiDefinitionBtn" class="gemini-icon-btn" title="Consultar Gemini" aria-label="Consultar Gemini">✨</button>
                 <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
                 <span class="custom-definition-actions">
                   <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
-                  <button id="askGeminiDefinitionBtn" class="primary" title="Consultar Gemini">✨</button>
                 </span>
               </div>
             </div>
@@ -2543,6 +2577,10 @@
       state.vocabMap.set(enriched.vocabKey, enriched);
       touchVocabularyData();
       entry = enriched;
+      if (getEffectiveFamiliarityLevel(entry.familiarityLevel) == null) {
+        const withDefaultLevel = await setTokenFamiliarity(entry.vocabKey, 1);
+        entry = withDefaultLevel || entry;
+      }
       state.tokenSelection = {
         token: resolvedToken,
         entry,
