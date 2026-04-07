@@ -617,6 +617,11 @@
       color: var(--text);
       background: color-mix(in srgb, var(--border) 45%, transparent);
     }
+    .copy-glyph-btn.is-copied {
+      color: #16a34a;
+      background: color-mix(in srgb, #16a34a 18%, transparent);
+      transform: scale(1.08);
+    }
     .sentence-copy-wrap {
       display: inline-flex;
       align-items: flex-start;
@@ -2246,6 +2251,18 @@
       }
     }
 
+    function showCopyFeedback(button) {
+      if (!button) return;
+      const originalLabel = button.dataset.copyOriginalLabel || button.textContent || '⧉';
+      button.dataset.copyOriginalLabel = originalLabel;
+      button.classList.add('is-copied');
+      button.textContent = '✓';
+      window.setTimeout(() => {
+        button.classList.remove('is-copied');
+        button.textContent = originalLabel;
+      }, 650);
+    }
+
     function renderTokenPanel() {
       const host = $('#tokenPanelHost');
       if (!host) return;
@@ -2423,7 +2440,8 @@
         closeTokenPanel();
       });
       $('#copyTokenSurfaceBtn')?.addEventListener('click', async () => {
-        await copyTextToClipboard(displaySurface);
+        const copied = await copyTextToClipboard(displaySurface);
+        if (copied) showCopyFeedback($('#copyTokenSurfaceBtn'));
       });
       host.querySelector('[data-close-token-panel="1"]')?.addEventListener('click', closeTokenPanel);
     }
@@ -4017,7 +4035,8 @@
             || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
             || '';
           if (!currentSentence.trim()) return;
-          await copyTextToClipboard(currentSentence.replace(/\s+/gu, ''));
+          const copied = await copyTextToClipboard(currentSentence.replace(/\s+/gu, ''));
+          if (copied) showCopyFeedback($('#copySentenceBtn'));
         });
         $('#currentReaderPanel .sentence-box')?.addEventListener('click', async (e) => {
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
