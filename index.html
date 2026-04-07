@@ -2359,9 +2359,14 @@
       });
       $('#saveUserDefinitionBtn')?.addEventListener('click', async () => {
         const text = $('#userDefinitionInput')?.value || '';
-        const updated = await updateUserDefinition(entry.vocabKey, text);
+        let updated = await updateUserDefinition(entry.vocabKey, text);
         if (!updated) return;
+        if (text.trim() && getEffectiveFamiliarityLevel(updated.familiarityLevel) == null) {
+          updated = await setTokenFamiliarity(entry.vocabKey, 1) || updated;
+          applyFamiliarityStyles(updated.vocabKey, updated.familiarityLevel);
+        }
         state.tokenSelection.entry = updated;
+        state.tokenSelection.draftLevel = updated.familiarityLevel;
         state.tokenSelection.userDefinitionDraft = updated.userDefinition || '';
         state.tokenSelection.isEditingUserDefinition = false;
         renderTokenPanel();
