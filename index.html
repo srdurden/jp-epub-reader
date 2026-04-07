@@ -466,7 +466,9 @@
     .token-panel-top-row {
       display: flex;
       justify-content: center;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #d1d5db;
     }
     .token-grid { display: grid; gap: 6px; }
     .token-grid .v { font-weight: 400; word-break: break-word; }
@@ -513,7 +515,9 @@
       width: fit-content;
     }
     .external-links-row {
-      margin-top: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #d1d5db;
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
@@ -2333,8 +2337,6 @@
               </div>
               ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span></div>` : ''}
             </div>
-            <div class="spacer"></div>
-            <button id="markAsKnownBtn" class="icon-btn" title="Marcar como visto">✓</button>
           </div>
           <div class="token-grid">
             <span class="v">${escapeHtml(dictionaryDefinition)}</span>
@@ -2365,14 +2367,6 @@
       `;
       const readerContent = $('.reader-content');
       if (readerContent) readerContent.classList.add('with-panel');
-      $('#markAsKnownBtn')?.addEventListener('click', async () => {
-        const updated = await setTokenFamiliarity(entry.vocabKey, 5);
-        if (!updated) return;
-        state.tokenSelection.entry = updated;
-        state.tokenSelection.draftLevel = updated.familiarityLevel;
-        applyFamiliarityStyles(updated.vocabKey, updated.familiarityLevel);
-        closeTokenPanel();
-      });
       host.querySelectorAll('[data-level]').forEach((btn) => btn.addEventListener('click', async () => {
         const rawLevel = btn.dataset.level;
         const level = rawLevel ? Number(rawLevel) : null;
