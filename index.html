@@ -177,9 +177,49 @@
       transform: translateX(-50%) translateY(0) scale(1);
     }
     .reader-progress input[type="range"] {
+      --progress-value: 0%;
       width: 100%;
       padding: 0;
-      accent-color: #16a34a;
+      height: 12px;
+      border: 0;
+      border-radius: 999px;
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    .reader-progress input[type="range"]::-webkit-slider-runnable-track {
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(to right, #16a34a 0%, #16a34a var(--progress-value), #9ca3af var(--progress-value), #9ca3af 100%);
+    }
+    .reader-progress input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      margin-top: -6px;
+      border-radius: 50%;
+      border: 0;
+      background: #16a34a;
+      box-shadow: 0 2px 8px rgba(22, 163, 74, 0.35);
+    }
+    .reader-progress input[type="range"]::-moz-range-track {
+      height: 10px;
+      border-radius: 999px;
+      background: #9ca3af;
+    }
+    .reader-progress input[type="range"]::-moz-range-progress {
+      height: 10px;
+      border-radius: 999px;
+      background: #16a34a;
+    }
+    .reader-progress input[type="range"]::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 0;
+      background: #16a34a;
+      box-shadow: 0 2px 8px rgba(22, 163, 74, 0.35);
     }
     .reader-menu {
       display: grid;
@@ -423,12 +463,10 @@
       font-size: 0.94rem;
       font-weight: 400;
     }
-    .token-panel-handle {
-      width: 86px;
-      height: 7px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--muted) 40%, transparent);
-      margin: 0 auto 8px;
+    .token-panel-top-row {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 8px;
     }
     .token-grid { display: grid; gap: 6px; }
     .token-grid .v { font-weight: 400; word-break: break-word; }
@@ -437,7 +475,7 @@
       color: var(--muted);
       font-weight: 400;
     }
-    .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 0; justify-content: center; }
     .token-panel-footer {
       margin-top: 12px;
       display: flex;
@@ -2281,7 +2319,12 @@
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
-          <div class="token-panel-handle" aria-hidden="true"></div>
+          <div class="token-panel-top-row">
+            <div class="level-picker" aria-label="Nivel de conocimiento">
+              <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
+              ${[1,2,3].map((lvl) => `<button class="level-btn ${lvl === 3 ? 'level-checkmark' : ''} ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl === 3 ? '✓' : lvl}</button>`).join('')}
+            </div>
+          </div>
           <div class="toolbar" style="margin-bottom: 8px; align-items: center;">
             <div>
               <div class="token-panel-headword">
@@ -2318,12 +2361,6 @@
             <button id="askChatgptBtn" class="chatgpt-btn">ChatGPT</button>
             <button id="openGoogleTranslateBtn" class="chatgpt-btn">Google Translate</button>
           </div>
-          <footer class="token-panel-footer">
-            <div class="level-picker" aria-label="Nivel de conocimiento">
-              <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
-              ${[1,2,3].map((lvl) => `<button class="level-btn ${lvl === 3 ? 'level-checkmark' : ''} ${Number(draftLevel) === lvl ? 'active' : ''}" data-level="${lvl}">${lvl === 3 ? '✓' : lvl}</button>`).join('')}
-            </div>
-          </footer>
         </aside>
       `;
       const readerContent = $('.reader-content');
@@ -3912,6 +3949,11 @@
       const updatePageProgressPreview = (visible = false) => {
         if (!pageProgressInput || !pageProgressBubble) return;
         const { current, total, left } = getPageProgressPreviewMetrics();
+        const min = Number(pageProgressInput.min) || 0;
+        const max = Number(pageProgressInput.max) || 0;
+        const value = Math.max(min, Math.min(max, Number(pageProgressInput.value) || 0));
+        const percent = max > min ? ((value - min) / (max - min)) * 100 : 0;
+        pageProgressInput.style.setProperty('--progress-value', `${percent}%`);
         pageProgressBubble.textContent = `Pag. ${current}/${total}`;
         pageProgressBubble.style.left = `${left}px`;
         pageProgressBubble.classList.toggle('is-visible', Boolean(visible));
