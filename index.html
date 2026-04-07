@@ -2382,6 +2382,7 @@
           <div class="external-links-row">
             <button id="askChatgptBtn" class="chatgpt-btn">ChatGPT</button>
             <button id="openGoogleTranslateBtn" class="chatgpt-btn">Google Translate</button>
+            <button id="openKanshudoBtn" class="chatgpt-btn">Kanshudo</button>
           </div>
         </aside>
       `;
@@ -2484,6 +2485,12 @@
         const promptWord = entry.surface || token.surface || token.baseForm || '';
         if (!promptWord.trim()) return;
         const url = 'https://translate.google.com/?sl=ja&tl=es&op=translate&text=' + encodeURIComponent(promptWord);
+        window.open(url, '_blank', 'noopener,noreferrer');
+      });
+      $('#openKanshudoBtn')?.addEventListener('click', () => {
+        const promptWord = entry.surface || token.surface || token.baseForm || '';
+        if (!promptWord.trim()) return;
+        const url = 'https://www.kanshudo.com/searchq?q=' + encodeURIComponent(promptWord);
         window.open(url, '_blank', 'noopener,noreferrer');
       });
       $('#removeVocabEntryBtn')?.addEventListener('click', async () => {
