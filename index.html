@@ -2518,10 +2518,13 @@
       // Lookup primero para persistir una identidad léxica mejor (lemma resuelto cuando exista).
       const request = buildDictionaryLookupRequest(token, context);
       const dictionaryResult = await lookupDictionaryEntry(request, token, context);
-      const resolvedSurface = request.candidateSurfaces?.[request.candidateSurfaces.length - 1] || token.surface;
+      const clickedSurface = token.surface || '';
+      const lookupSurface = request.candidateSurfaces?.[request.candidateSurfaces.length - 1] || clickedSurface;
       const resolvedToken = {
         ...token,
-        surface: dictionaryResult?.queriedSurface || resolvedSurface || token.surface,
+        surface: clickedSurface,
+        lookupSurface,
+        matchedSurface: dictionaryResult?.queriedSurface || lookupSurface,
         baseForm: dictionaryResult?.lemma || token.baseForm,
         reading: dictionaryResult?.readingKana || token.reading,
         pos: dictionaryResult?.pos || token.pos
@@ -2631,12 +2634,15 @@
     function isLikelyInflectionContinuation(surface) {
       const s = normalizeTokenSurface(surface || '');
       if (!s) return false;
+      const blockedParticles = new Set([
+        'の','は','が','を','に','へ','と','も','や','か','ね','よ','な','わ','ぞ','さ'
+      ]);
+      if (blockedParticles.has(s)) return false;
       const chunks = new Set([
         'っ','て','で','た','だ','ない','なかった','ます','ました','ません','たい','たくない','たいです',
         'んで','んだ','いて','いで','して','した','れる','られる','せる','させる','くない','かった','そう'
       ]);
       if (chunks.has(s)) return true;
-      if (isKanaChunk(s) && s.length <= 4) return true;
       return /^(ている|でいる|てる|でる|ちゃう|じゃう|かった|くない|ない|ます|ました)$/u.test(s);
     }
 
@@ -2987,7 +2993,7 @@
       const now = new Date().toISOString();
       return {
         ...vocabEntry,
-        surface: vocabEntry.surface || token?.surface || dictionaryEntry?.queriedSurface || vocabEntry.normalizedKey,
+        surface: token?.surface || vocabEntry.surface || dictionaryEntry?.queriedSurface || vocabEntry.normalizedKey,
         lemma: dictionaryEntry?.lemma || vocabEntry.lemma || token?.baseForm || null,
         readingKana: dictionaryEntry?.readingKana || vocabEntry.readingKana || null,
         readingRomaji: dictionaryEntry?.readingRomaji || vocabEntry.readingRomaji || null,
