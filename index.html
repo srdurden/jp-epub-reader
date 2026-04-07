@@ -1032,6 +1032,8 @@
     };
     const SETTINGS_KEY = 'app_settings';
     const AZURE_TRANSLATOR_ENDPOINT = 'https://api.cognitive.microsofttranslator.com';
+    const DEFAULT_GEMINI_MODEL = 'gemini-flash-lite-latest';
+    const DEFAULT_GEMINI_PROMPT = 'Responde únicamente repitiendo la palabra + la palabra en hiragana entre parentesis + la definición en castellano ( por ej.  "仕方ない - しかたない  - No se puede evitar / No hay remedio"). La palabra a definir ahora es: ';
     const DEFAULT_SETTINGS = {
       theme: 'light',
       fontSize: 18,
@@ -1039,7 +1041,10 @@
       tokenDebug: false,
       lastOpenedBookId: null,
       azureTranslateKey: '',
-      azureTranslateRegion: ''
+      azureTranslateRegion: '',
+      geminiApiKey: '',
+      geminiPrompt: DEFAULT_GEMINI_PROMPT,
+      geminiModel: DEFAULT_GEMINI_MODEL
     };
 
     const state = {
@@ -1092,6 +1097,7 @@
         importMessage: ''
       },
       translationConfigStatus: '',
+      geminiConfigStatus: '',
       sentenceTranslation: {
         bookId: null,
         sectionIndex: null,
@@ -1345,6 +1351,24 @@
       return Boolean(key && region);
     }
 
+
+    function getGeminiConfig() {
+      return {
+        apiKey: (state.settings.geminiApiKey || '').trim(),
+        prompt: state.settings.geminiPrompt || DEFAULT_GEMINI_PROMPT,
+        model: (state.settings.geminiModel || DEFAULT_GEMINI_MODEL).trim() || DEFAULT_GEMINI_MODEL
+      };
+    }
+
+    function normalizeGeminiModel(modelName = '') {
+      return modelName.replace(/^models\//i, '').trim() || DEFAULT_GEMINI_MODEL;
+    }
+
+    function hasGeminiConfig() {
+      const { apiKey, model } = getGeminiConfig();
+      return Boolean(apiKey && normalizeGeminiModel(model));
+    }
+
     function resetSentenceTranslation() {
       state.sentenceTranslation = {
         bookId: null,
@@ -1426,6 +1450,49 @@
       const translatedText = payload?.[0]?.translations?.[0]?.text || '';
       if (!translatedText) throw new Error('Azure no devolvió ninguna traducción.');
       return translatedText;
+    }
+
+
+    async function askGemini(promptText, options = {}) {
+      const { apiKey, model } = getGeminiConfig();
+      const normalizedModel = normalizeGeminiModel(model);
+      if (!apiKey) throw new Error('Configura tu clave API en Gemini antes de usar esta función.');
+      if (!normalizedModel) throw new Error('Configura un modelo válido en Gemini antes de usar esta función.');
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(normalizedModel)}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: promptText }
+              ]
+            }
+          ]
+        })
+      });
+      let payload = null;
+      const raw = await response.text();
+      if (raw) {
+        try { payload = JSON.parse(raw); } catch { payload = raw; }
+      }
+      if (!response.ok) {
+        const message = typeof payload === 'string'
+          ? payload
+          : payload?.error?.message || payload?.message || `Error ${response.status} al consultar Gemini.`;
+        throw new Error(message);
+      }
+      const textParts = payload?.candidates?.[0]?.content?.parts
+        ?.map((part) => typeof part?.text === 'string' ? part.text : '')
+        .filter(Boolean)
+        || [];
+      const result = textParts.join('\n').trim();
+      if (!result) throw new Error('Gemini no devolvió ningún texto.');
+      if (options.returnPayload) return { text: result, payload };
+      return result;
     }
 
     // =========================
@@ -2161,7 +2228,10 @@
             <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
               <div style="display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:start;">
                 <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
-                <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
+                <span class="custom-definition-actions">
+                  <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
+                  <button id="askGeminiDefinitionBtn" class="primary" title="Consultar Gemini">?</button>
+                </span>
               </div>
             </div>
             ${hasUserDefinition ? `
@@ -2225,6 +2295,44 @@
         state.tokenSelection.userDefinitionDraft = updated.userDefinition || '';
         state.tokenSelection.isEditingUserDefinition = false;
         renderTokenPanel();
+      });
+      $('#askGeminiDefinitionBtn')?.addEventListener('click', async () => {
+        const actionBtn = $('#askGeminiDefinitionBtn');
+        const input = $('#userDefinitionInput');
+        const promptWord = entry.surface || token.surface || token.baseForm || '';
+        if (!promptWord.trim()) return;
+        const { prompt, apiKey } = getGeminiConfig();
+        if (!apiKey) {
+          alert('Configura primero tu clave API en Gemini.');
+          return;
+        }
+        if (!input) return;
+        const previousLabel = actionBtn?.textContent || '?';
+        const previousDraft = input.value || '';
+        const finalPrompt = `${prompt || DEFAULT_GEMINI_PROMPT}${promptWord}`;
+        try {
+          if (actionBtn) {
+            actionBtn.disabled = true;
+            actionBtn.textContent = '…';
+          }
+          input.value = 'Consultando...';
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          const geminiText = await askGemini(finalPrompt);
+          input.value = geminiText;
+          state.tokenSelection.userDefinitionDraft = geminiText;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        } catch (err) {
+          input.value = previousDraft;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          alert(err?.message || 'No se pudo consultar Gemini.');
+        } finally {
+          if (actionBtn) {
+            actionBtn.disabled = false;
+            actionBtn.textContent = previousLabel;
+          }
+        }
       });
       $('#editUserDefinitionBtn')?.addEventListener('click', () => {
         state.tokenSelection.isEditingUserDefinition = true;
@@ -3196,6 +3304,68 @@
       });
     }
 
+    async function renderGeminiView() {
+      state.route = 'gemini';
+      syncDocumentScrollLock();
+      const app = $('#app');
+      const apiKeyValue = state.settings.geminiApiKey || '';
+      const promptValue = state.settings.geminiPrompt || DEFAULT_GEMINI_PROMPT;
+      const modelValue = state.settings.geminiModel || DEFAULT_GEMINI_MODEL;
+      const isConfigured = hasGeminiConfig();
+      app.innerHTML = `
+        <div class="library-shell">
+          <div class="library-card">
+            <div class="toolbar" style="margin-bottom:0;">
+              <button id="backLibraryFromGeminiBtn" class="library-action-btn" type="button">← Biblioteca</button>
+            </div>
+            <h1 class="library-headline" style="margin-top:14px;">
+              <span class="library-title">Gemini</span>
+            </h1>
+            <div class="library-toolbar">
+              <div class="reader-menu-section">
+                <label for="geminiApiKeyInput"><strong>Clave API</strong></label>
+                <input id="geminiApiKeyInput" type="password" value="${escapeHtml(apiKeyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
+              </div>
+              <div class="reader-menu-section">
+                <label for="geminiModelInput"><strong>Modelo</strong></label>
+                <input id="geminiModelInput" type="text" value="${escapeHtml(modelValue)}" placeholder="gemini-flash-lite-latest" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+              </div>
+              <div class="reader-menu-section">
+                <label for="geminiPromptInput"><strong>Prompt</strong></label>
+                <textarea id="geminiPromptInput" rows="5" placeholder="Escribe aquí el prompt base" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:150px;border-radius:18px;padding:12px 16px;">${escapeHtml(promptValue)}</textarea>
+                <div class="field-help">Al pulsar ? en una palabra, se concatena este prompt con la palabra del popup.</div>
+              </div>
+              <div class="library-actions-row">
+                <button id="saveGeminiConfigBtn" class="library-action-btn" type="button">Guardar</button>
+                <button id="clearGeminiConfigBtn" class="library-action-btn" type="button">Borrar</button>
+              </div>
+            </div>
+            <p class="status library-status">${escapeHtml(state.geminiConfigStatus || (isConfigured ? 'Configuración de Gemini lista.' : 'Añade tu clave API y revisa el modelo y el prompt por defecto.'))}</p>
+          </div>
+        </div>`;
+
+      $('#backLibraryFromGeminiBtn')?.addEventListener('click', () => {
+        state.geminiConfigStatus = '';
+        renderLibraryView();
+      });
+      $('#saveGeminiConfigBtn')?.addEventListener('click', async () => {
+        const apiKey = ($('#geminiApiKeyInput')?.value || '').trim();
+        const model = normalizeGeminiModel(($('#geminiModelInput')?.value || '').trim());
+        const prompt = ($('#geminiPromptInput')?.value || '').trim() || DEFAULT_GEMINI_PROMPT;
+        await saveSettings({ geminiApiKey: apiKey, geminiModel: model, geminiPrompt: prompt });
+        state.geminiConfigStatus = apiKey
+          ? 'Configuración guardada localmente.'
+          : 'Configuración guardada sin clave API.';
+        renderGeminiView();
+      });
+      $('#clearGeminiConfigBtn')?.addEventListener('click', async () => {
+        await saveSettings({ geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL, geminiPrompt: DEFAULT_GEMINI_PROMPT });
+        state.geminiConfigStatus = 'Configuración restablecida.';
+        renderGeminiView();
+      });
+    }
+
     // =========================
     // Renderizado UI + Router
     // =========================
@@ -3256,6 +3426,7 @@
                 <div id="libraryActionsMenu" class="library-actions-menu hidden">
                   <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
                   <button id="openTranslationsBtn" class="library-action-btn">Traducciones</button>
+                  <button id="openGeminiBtn" class="library-action-btn">Gemini</button>
                   <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
                   <a id="refreshStaticCacheBtn" class="library-action-btn" href="${buildRandomRefreshUrl()}" title="Recargar portada">Refrescar</a>
                 </div>
@@ -3383,6 +3554,10 @@
       $('#openTranslationsBtn')?.addEventListener('click', () => {
         closeLibraryMenu();
         renderTranslationsView();
+      });
+      $('#openGeminiBtn')?.addEventListener('click', () => {
+        closeLibraryMenu();
+        renderGeminiView();
       });
 
       app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
