@@ -489,12 +489,14 @@
     }
     .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 0; justify-content: center; }
     .token-panel-word-row {
-      margin: 16px 0 12px;
+      margin: 0 -12px 12px;
       align-items: center;
       background: #eceff3;
       border: 1px solid #d1d5db;
-      border-radius: 12px;
-      padding: 10px 12px;
+      border-left: 0;
+      border-right: 0;
+      border-radius: 0;
+      padding: 12px 18px;
     }
     [data-theme="dark"] .token-panel-word-row {
       background: color-mix(in srgb, var(--surface-soft) 80%, #8b96ab 20%);
@@ -502,7 +504,6 @@
     }
     .token-panel-section {
       border-top: 1px solid #d1d5db;
-      border-bottom: 1px solid #d1d5db;
       padding: 12px 0;
       min-height: 50px;
       display: flex;
