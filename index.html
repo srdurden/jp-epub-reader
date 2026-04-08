@@ -727,19 +727,47 @@
     }
     .custom-definition-input-row {
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
-      align-items: start;
+      align-items: stretch;
+    }
+    .custom-definition-input-shell {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: stretch;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      overflow: hidden;
     }
     .gemini-icon-btn {
       border: 0;
+      border-right: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
       background: transparent;
       color: var(--primary);
-      padding: 6px 4px;
-      min-width: auto;
+      padding: 0 12px;
+      min-width: 42px;
       font-size: 1.15rem;
       line-height: 1;
       cursor: pointer;
+      border-radius: 0;
+      align-self: stretch;
+    }
+    #userDefinitionInput {
+      border: 0;
+      background: transparent;
+      border-radius: 0;
+      resize: vertical;
+      min-height: 46px;
+      padding: 10px 12px;
+    }
+    #userDefinitionInput:focus,
+    .custom-definition-input-shell:focus-within {
+      outline: none;
+    }
+    .custom-definition-input-shell:focus-within {
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 24%, transparent);
+      border-color: color-mix(in srgb, var(--primary) 65%, var(--border) 35%);
     }
     .library-shell { display: grid; gap: 18px; }
     .library-card,
@@ -2413,8 +2441,10 @@
               <div class="token-panel-section-content">
                 <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
                   <div class="custom-definition-input-row">
-                    <button id="askGeminiDefinitionBtn" class="gemini-icon-btn" title="Consultar Gemini" aria-label="Consultar Gemini">✦</button>
-                    <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
+                    <div class="custom-definition-input-shell">
+                      <button id="askGeminiDefinitionBtn" class="gemini-icon-btn" title="Consultar Gemini" aria-label="Consultar Gemini">✦</button>
+                      <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
+                    </div>
                     <span class="custom-definition-actions">
                       <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
                     </span>
