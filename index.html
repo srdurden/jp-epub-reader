@@ -436,8 +436,7 @@
     .token-panel-backdrop {
       position: absolute;
       inset: 0;
-      background: rgba(15, 23, 42, 0.22);
-      backdrop-filter: blur(2px);
+      background: rgba(15, 23, 42, 0.28);
       pointer-events: auto;
     }
     .token-panel {
@@ -446,66 +445,51 @@
       left: 50%;
       transform: translate(-50%, -50%);
       margin: 0;
-      border: 1px solid #ded9e8;
-      border-radius: 30px;
-      background: color-mix(in srgb, var(--surface) 96%, #ffffff 4%);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--surface);
       padding: 10px 12px 12px;
-      box-shadow: 0 20px 46px rgba(101, 93, 132, 0.14), 0 6px 18px rgba(78, 72, 105, 0.05);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
       z-index: 3;
-      width: min(730px, calc(100vw - 28px));
+      width: min(560px, calc(100vw - 24px));
       max-height: min(82vh, 780px);
       overflow-y: auto;
       overflow-x: visible;
       pointer-events: auto;
-      isolation: isolate;
-    }
-    .token-panel::before {
-      content: "";
-      position: absolute;
-      inset: 7px;
-      border-radius: 25px;
-      border: 1px solid #e6e1ee;
-      pointer-events: none;
-      z-index: -1;
     }
     .token-panel h3 {
       margin: 0;
-      font-size: clamp(2.85rem, 5.7vw, 3.55rem);
+      font-size: clamp(2.5rem, 7vw, 3.4rem);
       line-height: 0.98;
       letter-spacing: -0.045em;
     }
     .token-lemma-line {
       margin-top: 8px;
       color: var(--muted);
-      font-size: 1.08rem;
-      font-weight: 600;
-      line-height: 1.22;
-      letter-spacing: -0.015em;
+      font-size: 1.18rem;
+      font-weight: 500;
+      line-height: 1.25;
     }
     .token-panel-top-row {
       display: grid;
-      grid-template-columns: 52px 1fr 52px;
+      grid-template-columns: auto 1fr auto;
       align-items: center;
       gap: 14px;
-      margin: -2px 0 14px;
-      padding: 6px 4px 14px;
-      border-bottom: 1px solid #e2deea;
+      margin: -2px 0 18px;
+      padding: 4px 0 14px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, #f3f4f6 32%);
     }
     .token-panel-top-row .left-actions,
     .token-panel-top-row .right-actions {
       display: flex;
       align-items: center;
-      min-width: 52px;
-      min-height: 48px;
+      min-width: 48px;
     }
     .token-panel-top-row .left-actions { justify-self: start; }
     .token-panel-top-row .right-actions { justify-self: end; }
     .token-grid {
       display: grid;
       gap: 14px;
-      border-top: 1px solid #ece8f1;
-      margin-top: 14px;
-      padding-top: 14px;
     }
     .token-grid .v {
       font-weight: 400;
@@ -523,20 +507,18 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 0;
+      gap: 4px;
       margin: 0 auto;
       padding: 4px;
-      min-height: 58px;
-      border: 1px solid #d7d2e2;
-      background: #fbfbfd;
+      border: 1px solid color-mix(in srgb, var(--border) 82%, #ffffff 18%);
+      background: color-mix(in srgb, var(--surface-soft) 86%, #ffffff 14%);
       border-radius: 999px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
     }
     .token-panel-word-row {
-      margin: 0;
+      margin: 6px 0 2px;
       align-items: center;
-      padding: 6px 10px 0;
-      min-height: 116px;
+      padding: 0;
     }
     .token-panel-footer {
       margin-top: 12px;
@@ -547,7 +529,7 @@
       display: flex;
       gap: 12px;
       align-items: flex-start;
-      padding: 6px 0 0;
+      padding: 14px 0 0;
     }
     .custom-definition-actions {
       display: inline-flex;
@@ -555,8 +537,8 @@
       flex-shrink: 0;
     }
     .custom-definition-actions .icon-btn {
-      border: 1px solid #dcd7e7;
-      background: #fbfbfd;
+      border: 1px solid color-mix(in srgb, var(--border) 86%, #ffffff 14%);
+      background: color-mix(in srgb, var(--surface-soft) 84%, #ffffff 16%);
       border-radius: 14px;
       width: 42px;
       height: 42px;
@@ -566,93 +548,58 @@
       font-size: 1rem;
       box-shadow: 0 6px 16px rgba(95, 83, 132, 0.08);
     }
-    .token-panel-definition {
-      font-size: 1.14rem;
-      line-height: 1.24;
-      letter-spacing: -0.015em;
-      padding: 0 10px;
-    }
-    .custom-definition-input-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
-      align-items: center;
-      padding: 0 10px;
-    }
-    .note-input-shell {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      align-items: center;
-      gap: 8px;
-      min-height: 58px;
-      padding: 0 14px 0 12px;
-      border-radius: 20px;
-      border: 1px solid #d9d4e4;
-      background: #ffffff;
-      box-shadow: 0 6px 16px rgba(95, 83, 132, 0.08);
-    }
     #userDefinitionInput {
-      min-height: 56px;
-      height: 56px;
+      min-height: 3.35rem;
+      height: auto;
       resize: none;
       overflow: hidden;
-      padding: 14px 2px 12px 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      font-size: 1rem;
-      line-height: 1.2;
-    }
-    #userDefinitionInput:focus {
-      outline: none;
-      box-shadow: none;
+      padding: 13px 16px;
+      border-radius: 18px;
+      border: 1px solid color-mix(in srgb, var(--border) 84%, #ffffff 16%);
+      background: color-mix(in srgb, var(--surface) 92%, #ffffff 8%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
     }
     #userDefinitionInput::placeholder {
-      color: color-mix(in srgb, var(--muted) 90%, #ffffff 10%);
+      color: color-mix(in srgb, var(--muted) 88%, #ffffff 12%);
     }
     #saveUserDefinitionBtn {
-      width: 60px;
-      height: 60px;
+      width: 48px;
+      height: 48px;
       padding: 0;
       display: grid;
       place-items: center;
-      border-radius: 18px;
-      background: #ffffff;
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--surface) 92%, #ffffff 8%);
       color: var(--text);
-      border: 1px solid #d9d4e4;
-      box-shadow: 0 6px 16px rgba(95, 83, 132, 0.08);
-      font-size: 2rem;
-      font-weight: 400;
+      border: 1px solid color-mix(in srgb, var(--border) 84%, #ffffff 16%);
+      box-shadow: 0 8px 22px rgba(95, 83, 132, 0.09);
+      font-size: 1.5rem;
       line-height: 1;
     }
     .external-tool-btn {
-      flex: 1 1 0;
-      min-width: 0;
-      min-height: 62px;
+      flex: 1 1 150px;
+      min-height: 64px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 12px;
-      padding: 12px 18px;
+      padding: 14px 18px;
       border-radius: 18px;
-      border: 1px solid #d9d4e4;
-      background: #ffffff;
+      border: 1px solid color-mix(in srgb, var(--border) 84%, #ffffff 16%);
+      background: color-mix(in srgb, var(--surface) 90%, #ffffff 10%);
       color: var(--text);
-      box-shadow: 0 6px 16px rgba(95, 83, 132, 0.08);
-      font-size: 0.96rem;
+      box-shadow: 0 8px 22px rgba(95, 83, 132, 0.08);
+      font-size: 1rem;
       font-weight: 600;
-      line-height: 1.15;
+      line-height: 1.2;
       text-decoration: none;
-    }
-    .external-tool-btn span {
-      white-space: nowrap;
     }
     .external-tool-btn:active {
       transform: translateY(1px);
     }
     .external-tool-btn img {
-      width: 25px;
-      height: 25px;
+      width: 24px;
+      height: 24px;
       border-radius: 8px;
       object-fit: cover;
       flex: none;
@@ -661,79 +608,65 @@
       width: auto;
     }
     .external-links-row {
-      margin-top: 16px;
-      padding: 14px 10px 6px;
-      border-top: 1px solid #e2deea;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid color-mix(in srgb, var(--border) 68%, #f3f4f6 32%);
       display: flex;
-      gap: 14px;
-      flex-wrap: nowrap;
+      gap: 12px;
+      flex-wrap: wrap;
     }
     .level-btn {
-      min-width: 64px;
-      height: 50px;
-      padding: 0 18px;
+      min-width: 52px;
+      min-height: 52px;
+      padding: 0 16px;
       border-radius: 999px;
       border: 1px solid transparent;
       background: transparent;
-      color: #1f2332;
+      color: var(--text);
       font-weight: 700;
-      font-size: 1.3rem;
+      font-size: 1.45rem;
       box-shadow: none;
-      line-height: 1;
     }
     .level-btn.active {
-      background: linear-gradient(180deg, #8a84b6 0%, #7670a8 100%);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 86%, #a8a0cf 14%), color-mix(in srgb, var(--primary) 96%, #6d6598 4%));
       color: #fff;
       border-color: transparent;
-      box-shadow: 0 8px 18px rgba(118, 108, 164, 0.24);
+      box-shadow: 0 10px 24px rgba(118, 108, 164, 0.24);
     }
     .level-btn.level-checkmark {
       color: #16a34a;
       font-weight: 800;
-      font-size: 1.7rem;
-      min-width: 64px;
+      font-size: 1.6rem;
     }
     .level-btn.level-checkmark.active {
-      background: transparent;
+      background: color-mix(in srgb, #16a34a 14%, var(--surface));
       color: #16a34a;
-      border-color: transparent;
+      border-color: #16a34a;
       box-shadow: none;
     }
     .token-panel-action-btn {
-      width: 46px;
-      height: 46px;
-      min-width: 46px;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
       padding: 0;
       border-radius: 999px;
       display: grid;
       place-items: center;
-      border: 1px solid #d9d4e4;
-      background: #ffffff;
+      border: 1px solid color-mix(in srgb, var(--border) 84%, #ffffff 16%);
+      background: color-mix(in srgb, var(--surface) 92%, #ffffff 8%);
       color: var(--muted);
-      box-shadow: 0 6px 16px rgba(95, 83, 132, 0.08);
+      box-shadow: 0 8px 20px rgba(95, 83, 132, 0.08);
       font-size: 1rem;
-    }
-    .token-panel-action-btn svg,
-    .copy-glyph-btn svg {
-      width: 18px;
-      height: 18px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 1.8;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      vector-effect: non-scaling-stroke;
     }
     .token-panel-action-btn:hover {
       color: var(--text);
-      background: #faf9fd;
+      background: color-mix(in srgb, var(--surface-soft) 86%, #ffffff 14%);
     }
     .token-panel-delete-btn {
       color: var(--muted);
     }
     .token-panel-delete-btn:hover {
       color: var(--danger);
-    }
     }
     .vocab-list { display: grid; gap: 10px; }
     .vocab-item {
@@ -855,8 +788,6 @@
       cursor: pointer;
       border-radius: 8px;
       min-width: auto;
-      display: inline-grid;
-      place-items: center;
     }
     .copy-glyph-btn:hover {
       color: var(--text);
@@ -879,8 +810,8 @@
     }
     .token-panel-headword {
       display: inline-flex;
-      align-items: flex-start;
-      gap: 8px;
+      align-items: center;
+      gap: 6px;
     }
     .token-panel-definition {
       margin-top: 8px;
@@ -1291,9 +1222,9 @@
 
     @media (max-width: 640px) {
       .token-panel {
-        width: min(100vw - 18px, 730px);
+        width: min(100vw - 20px, 560px);
         border-radius: 24px;
-        padding: 10px 8px 10px;
+        padding: 10px 10px 12px;
       }
       .token-panel-top-row {
         grid-template-columns: auto 1fr;
@@ -1311,29 +1242,10 @@
         justify-self: end;
       }
       .token-panel-word-row {
-        margin-top: 0;
-        min-height: 96px;
-        padding-inline: 8px;
+        margin-top: 2px;
       }
       .custom-definition-input-row {
-        grid-template-columns: 1fr auto;
-        gap: 10px;
-        padding-inline: 8px;
-      }
-      .note-input-shell {
-        min-height: 54px;
-      }
-      #userDefinitionInput {
-        min-height: 52px;
-        height: 52px;
-      }
-      #saveUserDefinitionBtn {
-        width: 54px;
-        height: 54px;
-      }
-      .external-links-row {
-        flex-wrap: wrap;
-        padding-inline: 8px;
+        grid-template-columns: auto 1fr auto;
       }
       .external-tool-btn {
         flex-basis: 100%;
@@ -2599,14 +2511,12 @@
       const readingText = entry.readingKana || dictionaryResult?.readingKana || null;
       const showLemmaLine = Boolean(lemmaText || readingText);
       const sharedExternalIcon = 'https://img.icons8.com/ios7/1200/chatgpt.jpg';
-      const trashIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V5.8c0-.6.5-1 1-1h4c.6 0 1 .4 1 1V7"></path><path d="M8.2 7l.7 10.1c.1.9.8 1.6 1.7 1.6h2.8c.9 0 1.6-.7 1.7-1.6L15.8 7"></path><path d="M10 10.2v5.5"></path><path d="M14 10.2v5.5"></path></svg>';
-      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="1.8"></rect><rect x="5" y="5" width="10" height="10" rx="1.8"></rect></svg>';
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
           <div class="token-panel-top-row">
             <div class="left-actions">
-              <button class="token-panel-action-btn token-panel-delete-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario" aria-label="Sacar del vocabulario">${trashIcon}</button>
+              <button class="token-panel-action-btn token-panel-delete-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario" aria-label="Sacar del vocabulario">🗑</button>
             </div>
             <div class="level-picker" aria-label="Nivel de conocimiento">
               ${[1,2,3].map((lvl) => `<button class="level-btn ${lvl === 3 ? 'level-checkmark' : ''} ${(Number(draftLevel) >= lvl) ? 'active' : ''}" data-level="${lvl}">${lvl === 3 ? '✓' : lvl}</button>`).join('')}
@@ -2617,7 +2527,7 @@
             <div>
               <div class="token-panel-headword">
                 <h3>${escapeHtml(displaySurface)}</h3>
-                <button id="copyTokenSurfaceBtn" class="copy-glyph-btn" title="Copiar palabra" aria-label="Copiar palabra">${copyIcon}</button>
+                <button id="copyTokenSurfaceBtn" class="copy-glyph-btn" title="Copiar palabra" aria-label="Copiar palabra">⧉</button>
               </div>
               ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span></div>` : ''}
             </div>
@@ -2626,10 +2536,8 @@
             <span class="v token-panel-definition">${escapeHtml(dictionaryDefinition)}</span>
             <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
               <div class="custom-definition-input-row">
-                <div class="note-input-shell">
-                  <button id="askGeminiDefinitionBtn" class="gemini-icon-btn" title="Consultar Gemini" aria-label="Consultar Gemini">✨</button>
-                  <textarea id="userDefinitionInput" rows="1" placeholder="Añade tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
-                </div>
+                <button id="askGeminiDefinitionBtn" class="gemini-icon-btn" title="Consultar Gemini" aria-label="Consultar Gemini">✨</button>
+                <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
                 <span class="custom-definition-actions">
                   <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
                 </span>
