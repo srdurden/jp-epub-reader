@@ -457,68 +457,40 @@
       overflow-x: visible;
       pointer-events: auto;
     }
-    .token-panel h3 {
-      margin: 0;
-      font-size: clamp(2.5rem, 7vw, 3.4rem);
-      line-height: 0.98;
-      letter-spacing: -0.045em;
-    }
+    .token-panel h3 { margin: 0; font-size: 1.55rem; line-height: 1.1; }
     .token-lemma-line {
-      margin-top: 8px;
+      margin-top: 2px;
       color: var(--muted);
-      font-size: 1.18rem;
-      font-weight: 500;
-      line-height: 1.25;
+      font-size: 0.94rem;
+      font-weight: 400;
     }
     .token-panel-top-row {
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      gap: 14px;
-      margin: -2px 0 18px;
-      padding: 4px 0 14px;
-      border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, #f3f4f6 32%);
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #d1d5db;
     }
-    .token-panel-top-row .left-actions,
-    .token-panel-top-row .right-actions {
+    .token-panel-top-row .left-actions {
+      justify-self: start;
       display: flex;
-      align-items: center;
-      min-width: 48px;
     }
-    .token-panel-top-row .left-actions { justify-self: start; }
-    .token-panel-top-row .right-actions { justify-self: end; }
-    .token-grid {
-      display: grid;
-      gap: 14px;
+    .token-panel-top-row .right-actions {
+      justify-self: end;
+      display: flex;
     }
-    .token-grid .v {
-      font-weight: 400;
-      word-break: break-word;
-    }
-    .token-grid .hiragana {
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
+    .token-grid { display: grid; gap: 6px; }
+    .token-grid .v { font-weight: 400; word-break: break-word; }
+    .token-grid .hiragana { color: var(--muted); font-size: 0.95rem; }
     .token-panel h3 .hiragana {
       color: var(--muted);
       font-weight: 400;
     }
-    .level-picker {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      margin: 0 auto;
-      padding: 4px;
-      border: 1px solid color-mix(in srgb, var(--border) 82%, #ffffff 18%);
-      background: color-mix(in srgb, var(--surface-soft) 86%, #ffffff 14%);
-      border-radius: 999px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
-    }
+    .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 0; justify-content: center; }
     .token-panel-word-row {
-      margin: 6px 0 2px;
+      margin: 18px 0 14px;
       align-items: center;
-      padding: 0;
     }
     .token-panel-footer {
       margin-top: 12px;
@@ -527,146 +499,54 @@
     }
     .custom-definition-row {
       display: flex;
-      gap: 12px;
+      gap: 8px;
       align-items: flex-start;
-      padding: 14px 0 0;
     }
     .custom-definition-actions {
       display: inline-flex;
-      gap: 8px;
+      gap: 4px;
       flex-shrink: 0;
     }
     .custom-definition-actions .icon-btn {
-      border: 1px solid color-mix(in srgb, var(--border) 86%, #ffffff 14%);
-      background: color-mix(in srgb, var(--surface-soft) 84%, #ffffff 16%);
-      border-radius: 14px;
-      width: 42px;
-      height: 42px;
-      display: grid;
-      place-items: center;
-      padding: 0;
-      font-size: 1rem;
-      box-shadow: 0 6px 16px rgba(95, 83, 132, 0.08);
+      border: 1px solid var(--border);
+      background: var(--surface-soft);
+      border-radius: 10px;
+      padding: 6px 8px;
+      font-size: 0.95rem;
     }
     #userDefinitionInput {
-      min-height: 3.35rem;
+      min-height: 2.3em;
       height: auto;
-      resize: none;
+      resize: vertical;
       overflow: hidden;
-      padding: 13px 16px;
-      border-radius: 18px;
-      border: 1px solid color-mix(in srgb, var(--border) 84%, #ffffff 16%);
-      background: color-mix(in srgb, var(--surface) 92%, #ffffff 8%);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
-    }
-    #userDefinitionInput::placeholder {
-      color: color-mix(in srgb, var(--muted) 88%, #ffffff 12%);
     }
     #saveUserDefinitionBtn {
-      width: 48px;
-      height: 48px;
-      padding: 0;
-      display: grid;
-      place-items: center;
-      border-radius: 16px;
-      background: color-mix(in srgb, var(--surface) 92%, #ffffff 8%);
-      color: var(--text);
-      border: 1px solid color-mix(in srgb, var(--border) 84%, #ffffff 16%);
-      box-shadow: 0 8px 22px rgba(95, 83, 132, 0.09);
-      font-size: 1.5rem;
-      line-height: 1;
-    }
-    .external-tool-btn {
-      flex: 1 1 150px;
-      min-height: 64px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      padding: 14px 18px;
-      border-radius: 18px;
-      border: 1px solid color-mix(in srgb, var(--border) 84%, #ffffff 16%);
-      background: color-mix(in srgb, var(--surface) 90%, #ffffff 10%);
-      color: var(--text);
-      box-shadow: 0 8px 22px rgba(95, 83, 132, 0.08);
-      font-size: 1rem;
-      font-weight: 600;
-      line-height: 1.2;
-      text-decoration: none;
-    }
-    .external-tool-btn:active {
-      transform: translateY(1px);
-    }
-    .external-tool-btn img {
-      width: 24px;
-      height: 24px;
-      border-radius: 8px;
-      object-fit: cover;
-      flex: none;
+      background: #fff;
+      color: #000;
+      border-color: var(--border);
     }
     .chatgpt-btn {
-      width: auto;
+      width: fit-content;
     }
     .external-links-row {
       margin-top: 18px;
       padding-top: 16px;
-      border-top: 1px solid color-mix(in srgb, var(--border) 68%, #f3f4f6 32%);
+      border-top: 1px solid #d1d5db;
       display: flex;
-      gap: 12px;
+      gap: 8px;
       flex-wrap: wrap;
     }
-    .level-btn {
-      min-width: 52px;
-      min-height: 52px;
-      padding: 0 16px;
-      border-radius: 999px;
-      border: 1px solid transparent;
-      background: transparent;
-      color: var(--text);
-      font-weight: 700;
-      font-size: 1.45rem;
-      box-shadow: none;
-    }
-    .level-btn.active {
-      background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 86%, #a8a0cf 14%), color-mix(in srgb, var(--primary) 96%, #6d6598 4%));
-      color: #fff;
-      border-color: transparent;
-      box-shadow: 0 10px 24px rgba(118, 108, 164, 0.24);
-    }
+    .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
+    .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
     .level-btn.level-checkmark {
       color: #16a34a;
-      font-weight: 800;
-      font-size: 1.6rem;
+      font-weight: 700;
+      font-size: 1.05rem;
     }
     .level-btn.level-checkmark.active {
-      background: color-mix(in srgb, #16a34a 14%, var(--surface));
+      background: color-mix(in srgb, #16a34a 12%, var(--surface));
       color: #16a34a;
       border-color: #16a34a;
-      box-shadow: none;
-    }
-    .token-panel-action-btn {
-      width: 44px;
-      height: 44px;
-      min-width: 44px;
-      padding: 0;
-      border-radius: 999px;
-      display: grid;
-      place-items: center;
-      border: 1px solid color-mix(in srgb, var(--border) 84%, #ffffff 16%);
-      background: color-mix(in srgb, var(--surface) 92%, #ffffff 8%);
-      color: var(--muted);
-      box-shadow: 0 8px 20px rgba(95, 83, 132, 0.08);
-      font-size: 1rem;
-    }
-    .token-panel-action-btn:hover {
-      color: var(--text);
-      background: color-mix(in srgb, var(--surface-soft) 86%, #ffffff 14%);
-    }
-    .token-panel-delete-btn {
-      color: var(--muted);
-    }
-    .token-panel-delete-btn:hover {
-      color: var(--danger);
     }
     .vocab-list { display: grid; gap: 10px; }
     .vocab-item {
@@ -819,20 +699,16 @@
     .custom-definition-input-row {
       display: grid;
       grid-template-columns: auto 1fr auto;
-      gap: 10px;
-      align-items: center;
+      gap: 8px;
+      align-items: start;
     }
     .gemini-icon-btn {
-      width: 44px;
-      height: 44px;
-      min-width: 44px;
       border: 0;
       background: transparent;
-      color: #f59e0b;
-      padding: 0;
-      display: grid;
-      place-items: center;
-      font-size: 1.6rem;
+      color: var(--primary);
+      padding: 6px 4px;
+      min-width: auto;
+      font-size: 1.15rem;
       line-height: 1;
       cursor: pointer;
     }
@@ -1219,39 +1095,6 @@
         top: -8px;
       }
     }
-
-    @media (max-width: 640px) {
-      .token-panel {
-        width: min(100vw - 20px, 560px);
-        border-radius: 24px;
-        padding: 10px 10px 12px;
-      }
-      .token-panel-top-row {
-        grid-template-columns: auto 1fr;
-        grid-template-areas:
-          "trash levels"
-          "word word";
-      }
-      .token-panel-top-row .left-actions {
-        grid-area: trash;
-      }
-      .token-panel-top-row .right-actions {
-        display: none;
-      }
-      .level-picker {
-        justify-self: end;
-      }
-      .token-panel-word-row {
-        margin-top: 2px;
-      }
-      .custom-definition-input-row {
-        grid-template-columns: auto 1fr auto;
-      }
-      .external-tool-btn {
-        flex-basis: 100%;
-      }
-    }
-
   </style>
 </head>
 <body>
@@ -2510,13 +2353,12 @@
       const lemmaText = entry.lemma || dictionaryResult?.lemma || token.baseForm || null;
       const readingText = entry.readingKana || dictionaryResult?.readingKana || null;
       const showLemmaLine = Boolean(lemmaText || readingText);
-      const sharedExternalIcon = 'https://img.icons8.com/ios7/1200/chatgpt.jpg';
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
           <div class="token-panel-top-row">
             <div class="left-actions">
-              <button class="token-panel-action-btn token-panel-delete-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario" aria-label="Sacar del vocabulario">🗑</button>
+              <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
             </div>
             <div class="level-picker" aria-label="Nivel de conocimiento">
               ${[1,2,3].map((lvl) => `<button class="level-btn ${lvl === 3 ? 'level-checkmark' : ''} ${(Number(draftLevel) >= lvl) ? 'active' : ''}" data-level="${lvl}">${lvl === 3 ? '✓' : lvl}</button>`).join('')}
@@ -2554,9 +2396,9 @@
             ` : ''}
           </div>
           <div class="external-links-row">
-            <button id="askChatgptBtn" class="chatgpt-btn external-tool-btn"><img src="${sharedExternalIcon}" alt="" aria-hidden="true"><span>ChatGPT</span></button>
-            <button id="openGoogleTranslateBtn" class="chatgpt-btn external-tool-btn"><img src="${sharedExternalIcon}" alt="" aria-hidden="true"><span>Google Translate</span></button>
-            <button id="openKanshudoBtn" class="chatgpt-btn external-tool-btn"><img src="${sharedExternalIcon}" alt="" aria-hidden="true"><span>Kanshudo</span></button>
+            <button id="askChatgptBtn" class="chatgpt-btn">ChatGPT</button>
+            <button id="openGoogleTranslateBtn" class="chatgpt-btn">Google Translate</button>
+            <button id="openKanshudoBtn" class="chatgpt-btn">Kanshudo</button>
           </div>
         </aside>
       `;
