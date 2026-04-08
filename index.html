@@ -480,7 +480,7 @@
       justify-self: end;
       display: flex;
     }
-    .token-grid { display: grid; gap: 6px; }
+    .token-grid { display: grid; gap: 10px; }
     .token-grid .v { font-weight: 400; word-break: break-word; }
     .token-grid .hiragana { color: var(--muted); font-size: 0.95rem; }
     .token-panel h3 .hiragana {
@@ -489,8 +489,27 @@
     }
     .level-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 0; justify-content: center; }
     .token-panel-word-row {
-      margin: 18px 0 14px;
+      margin: 16px 0 12px;
       align-items: center;
+      background: #eceff3;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    [data-theme="dark"] .token-panel-word-row {
+      background: color-mix(in srgb, var(--surface-soft) 80%, #8b96ab 20%);
+      border-color: color-mix(in srgb, var(--border) 78%, #9ca3af 22%);
+    }
+    .token-panel-section {
+      border-top: 1px solid #d1d5db;
+      border-bottom: 1px solid #d1d5db;
+      padding: 12px 0;
+      min-height: 96px;
+      display: flex;
+      align-items: center;
+    }
+    .token-panel-section-content {
+      width: 100%;
     }
     .token-panel-footer {
       margin-top: 12px;
@@ -527,14 +546,24 @@
     }
     .chatgpt-btn {
       width: fit-content;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.9rem;
     }
     .external-links-row {
-      margin-top: 18px;
-      padding-top: 16px;
-      border-top: 1px solid #d1d5db;
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      background: #eceff3;
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+      justify-content: center;
+    }
+    [data-theme="dark"] .external-links-row {
+      background: color-mix(in srgb, var(--surface-soft) 80%, #8b96ab 20%);
+      border-color: color-mix(in srgb, var(--border) 78%, #9ca3af 22%);
     }
     .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
     .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
@@ -2375,25 +2404,33 @@
             </div>
           </div>
           <div class="token-grid">
-            <span class="v token-panel-definition">${escapeHtml(dictionaryDefinition)}</span>
-            <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
-              <div class="custom-definition-input-row">
-                <button id="askGeminiDefinitionBtn" class="gemini-icon-btn" title="Consultar Gemini" aria-label="Consultar Gemini">✨</button>
-                <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
-                <span class="custom-definition-actions">
-                  <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
-                </span>
+            <div class="token-panel-section">
+              <div class="token-panel-section-content">
+                <span class="v token-panel-definition">${escapeHtml(dictionaryDefinition)}</span>
               </div>
             </div>
-            ${hasUserDefinition ? `
-              <div class="v custom-definition-row">
-                <span class="custom-definition-actions">
-                  <button id="editUserDefinitionBtn" class="icon-btn" title="Editar nota personal">✎</button>
-                  <button id="deleteUserDefinitionBtn" class="icon-btn" title="Borrar nota personal">🗑</button>
-                </span>
-                <span>${escapeHtml(entry.userDefinition)}</span>
+            <div class="token-panel-section">
+              <div class="token-panel-section-content">
+                <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
+                  <div class="custom-definition-input-row">
+                    <button id="askGeminiDefinitionBtn" class="gemini-icon-btn" title="Consultar Gemini" aria-label="Consultar Gemini">✦</button>
+                    <textarea id="userDefinitionInput" rows="1" placeholder="Escribe tu nota personal...">${escapeHtml(userDefinitionDraft || '')}</textarea>
+                    <span class="custom-definition-actions">
+                      <button id="saveUserDefinitionBtn" class="primary" title="Guardar definición">+</button>
+                    </span>
+                  </div>
+                </div>
+                ${hasUserDefinition ? `
+                  <div class="v custom-definition-row">
+                    <span class="custom-definition-actions">
+                      <button id="editUserDefinitionBtn" class="icon-btn" title="Editar nota personal">✎</button>
+                      <button id="deleteUserDefinitionBtn" class="icon-btn" title="Borrar nota personal">🗑</button>
+                    </span>
+                    <span>${escapeHtml(entry.userDefinition)}</span>
+                  </div>
+                ` : ''}
               </div>
-            ` : ''}
+            </div>
           </div>
           <div class="external-links-row">
             <button id="askChatgptBtn" class="chatgpt-btn">ChatGPT</button>
