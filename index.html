@@ -770,6 +770,60 @@
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 24%, transparent);
       border-color: color-mix(in srgb, var(--primary) 65%, var(--border) 35%);
     }
+    .library-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.28);
+      z-index: 24;
+    }
+    .library-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(560px, calc(100vw - 24px));
+      max-height: min(82vh, 780px);
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: color-mix(in srgb, var(--surface) 92%, var(--surface-strong) 8%);
+      box-shadow: var(--shadow-strong);
+      padding: 18px;
+      z-index: 25;
+    }
+    .library-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .library-modal-title {
+      margin: 0;
+      font-size: clamp(1.4rem, 6vw, 1.9rem);
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+    }
+    .library-modal-body {
+      display: grid;
+      gap: 12px;
+    }
+    .library-modal-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .library-modal-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    @media (min-width: 520px) {
+      .library-modal-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
     .library-shell { display: grid; gap: 18px; }
     .library-card,
     .book-tile {
@@ -1214,6 +1268,9 @@
       geminiPrompt: DEFAULT_GEMINI_PROMPT,
       geminiModel: DEFAULT_GEMINI_MODEL
     };
+    const BACKUP_FORMAT = 'jp_epub_reader_backup';
+    const BACKUP_FILE_VERSION = 1;
+    const BACKUP_STORE_NAMES = Object.freeze(Object.values(STORES));
 
     const state = {
       route: 'library',
@@ -1263,6 +1320,11 @@
         packsCount: 0,
         lastImportedAt: null,
         importMessage: ''
+      },
+      backupUi: {
+        isOpen: false,
+        isBusy: false,
+        status: ''
       },
       translationConfigStatus: '',
       geminiConfigStatus: '',
@@ -1504,6 +1566,192 @@
       state.settings = { ...state.settings, ...next };
       await dbPut(STORES.settings, { id: SETTINGS_KEY, value: state.settings });
       applyTheme(state.settings.theme);
+    }
+
+    async function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result || ''));
+        fr.onerror = () => reject(fr.error || new Error('No se pudo serializar el fichero.'));
+        fr.readAsDataURL(blob);
+      });
+    }
+
+    async function dataUrlToBlob(dataUrl) {
+      const response = await fetch(dataUrl);
+      return response.blob();
+    }
+
+    async function serializeBackupValue(value) {
+      if (value instanceof Blob) {
+        return {
+          __type: 'Blob',
+          mimeType: value.type || 'application/octet-stream',
+          dataUrl: await blobToDataUrl(value)
+        };
+      }
+      if (Array.isArray(value)) {
+        const out = [];
+        for (const item of value) out.push(await serializeBackupValue(item));
+        return out;
+      }
+      if (value && typeof value === 'object') {
+        const out = {};
+        for (const [key, nested] of Object.entries(value)) out[key] = await serializeBackupValue(nested);
+        return out;
+      }
+      return value;
+    }
+
+    async function deserializeBackupValue(value) {
+      if (Array.isArray(value)) {
+        const out = [];
+        for (const item of value) out.push(await deserializeBackupValue(item));
+        return out;
+      }
+      if (value && typeof value === 'object') {
+        if (value.__type === 'Blob' && typeof value.dataUrl === 'string') {
+          return dataUrlToBlob(value.dataUrl);
+        }
+        const out = {};
+        for (const [key, nested] of Object.entries(value)) out[key] = await deserializeBackupValue(nested);
+        return out;
+      }
+      return value;
+    }
+
+    function getBackupFileName() {
+      const now = new Date();
+      const parts = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0')
+      ];
+      const time = [
+        String(now.getHours()).padStart(2, '0'),
+        String(now.getMinutes()).padStart(2, '0'),
+        String(now.getSeconds()).padStart(2, '0')
+      ].join('-');
+      return `nihongo-reader-backup-${parts.join('-')}_${time}.json`;
+    }
+
+    function downloadBlobFile(blob, fileName) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function summarizeBackupStores(stores) {
+      const byStore = {};
+      let totalRecords = 0;
+      for (const storeName of BACKUP_STORE_NAMES) {
+        const count = Array.isArray(stores?.[storeName]) ? stores[storeName].length : 0;
+        byStore[storeName] = count;
+        totalRecords += count;
+      }
+      return { totalRecords, byStore };
+    }
+
+    async function createAppBackupPayload() {
+      const stores = {};
+      for (const storeName of BACKUP_STORE_NAMES) {
+        const rows = await dbGetAll(storeName);
+        const serializedRows = [];
+        for (const row of rows) serializedRows.push(await serializeBackupValue(row));
+        stores[storeName] = serializedRows;
+      }
+      return {
+        format: BACKUP_FORMAT,
+        fileVersion: BACKUP_FILE_VERSION,
+        appName: '日本語 Reader',
+        appVersion: APP_VERSION,
+        dbName: DB_NAME,
+        dbVersion: DB_VERSION,
+        exportedAt: new Date().toISOString(),
+        stores,
+        summary: summarizeBackupStores(stores)
+      };
+    }
+
+    async function downloadAppBackup() {
+      const payload = await createAppBackupPayload();
+      const fileName = getBackupFileName();
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      downloadBlobFile(blob, fileName);
+      return { fileName, summary: payload.summary, exportedAt: payload.exportedAt };
+    }
+
+    async function parseAppBackupFile(file) {
+      const text = await file.text();
+      let parsed = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch (error) {
+        throw new Error('El fichero no contiene un JSON válido.');
+      }
+      if (!parsed || parsed.format !== BACKUP_FORMAT || !parsed.stores || typeof parsed.stores !== 'object') {
+        throw new Error('El fichero no parece un backup válido de 日本語 Reader.');
+      }
+      return parsed;
+    }
+
+    async function replaceAllBackupStores(rawStores) {
+      const decodedStores = {};
+      for (const storeName of BACKUP_STORE_NAMES) {
+        const rows = Array.isArray(rawStores?.[storeName]) ? rawStores[storeName] : [];
+        const decodedRows = [];
+        for (const row of rows) decodedRows.push(await deserializeBackupValue(row));
+        decodedStores[storeName] = decodedRows;
+      }
+
+      const db = await openDatabase();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(BACKUP_STORE_NAMES, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('No se pudo guardar el backup en la base de datos.'));
+        tx.onabort = () => reject(tx.error || new Error('La importación del backup fue cancelada.'));
+
+        for (const storeName of BACKUP_STORE_NAMES) {
+          const store = tx.objectStore(storeName);
+          store.clear();
+          for (const row of decodedStores[storeName]) {
+            store.put(row);
+          }
+        }
+      });
+      return decodedStores;
+    }
+
+    async function importAppBackup(file) {
+      const parsed = await parseAppBackupFile(file);
+      const importedStores = await replaceAllBackupStores(parsed.stores);
+      state.currentBook = null;
+      state.currentBookId = null;
+      state.sections = [];
+      state.currentSpineIndex = 0;
+      state.currentSentenceIndex = 0;
+      state.sectionSentencesCache.clear();
+      state.sentenceTokenCache.clear();
+      state.pageMapsCache.clear();
+      state.pageSummariesCache.clear();
+      state.flatSentenceEntriesCache = null;
+      state.flatSentenceIndexLookupCache = null;
+      closeTokenPanel();
+      await loadSettings();
+      await ensureEmbeddedFallbackDictionary();
+      await loadDictionaryIndexes();
+      await refreshBooks();
+      await loadVocabularyMap();
+      return {
+        fileName: file.name,
+        exportedAt: parsed.exportedAt || null,
+        summary: parsed.summary || summarizeBackupStores(importedStores)
+      };
     }
 
     function getAzureTranslatorConfig() {
@@ -3600,6 +3848,8 @@
     // =========================
     // Renderizado UI + Router
     // =========================
+    let libraryOutsideClickHandler = null;
+
     async function refreshBooks() {
       state.books = await listBooks();
     }
@@ -3656,6 +3906,7 @@
                 <button id="libraryMenuToggleBtn" class="library-menu-toggle" type="button" aria-expanded="false" aria-controls="libraryActionsMenu" title="Abrir menú">☰</button>
                 <div id="libraryActionsMenu" class="library-actions-menu hidden">
                   <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
+                  <button id="openBackupModalBtn" class="library-action-btn">Exportar / importar</button>
                   <button id="openTranslationsBtn" class="library-action-btn">Traducciones</button>
                   <button id="openGeminiBtn" class="library-action-btn">Gemini</button>
                   <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
@@ -3665,6 +3916,7 @@
             </h1>
             <div class="library-toolbar">
               <input id="dictPackInput" class="hidden" type="file" accept="application/json,.json" multiple />
+              <input id="backupImportInput" class="hidden" type="file" accept="application/json,.json" />
               <input id="epubInput" class="hidden" type="file" accept=".epub,application/epub+zip" multiple />
               <div id="libraryThemeToggle" class="segmented-toggle theme-toggle-small" role="group" aria-label="Tema">
                 <button type="button" data-theme-option="light" class="${state.settings.theme === 'light' ? 'active' : ''}"><span class="toggle-icon">☀︎</span><span>Claro</span></button>
@@ -3716,6 +3968,24 @@
             </article>
           </div>
           <footer class="library-footer">Diccionario offline: ${state.dictionaryStatus.loadedEntries} entradas · packs: ${state.dictionaryStatus.packsCount} · última importación: ${formatDate(state.dictionaryStatus.lastImportedAt)}.</footer>
+          ${state.backupUi.isOpen ? `
+            <div class="library-modal-backdrop" data-close-backup-modal="1" aria-hidden="true"></div>
+            <aside class="library-modal" role="dialog" aria-modal="true" aria-labelledby="backupModalTitle">
+              <div class="library-modal-header">
+                <h2 id="backupModalTitle" class="library-modal-title">Exportar / importar</h2>
+                <button id="closeBackupModalBtn" class="icon-btn" type="button" aria-label="Cerrar popup">✕</button>
+              </div>
+              <div class="library-modal-body">
+                <p class="library-modal-note">Puedes descargar un backup completo de la app y restaurarlo más tarde subiendo el mismo fichero. Incluye libros EPUB, progreso, vocabulario, diccionarios, caché local y ajustes guardados en este navegador.</p>
+                <div class="library-modal-actions">
+                  <button id="exportAppBackupBtn" class="library-action-btn" type="button" ${state.backupUi.isBusy ? 'disabled' : ''}>Descargar backup</button>
+                  <button id="triggerImportBackupBtn" class="library-action-btn" type="button" ${state.backupUi.isBusy ? 'disabled' : ''}>Importar backup</button>
+                </div>
+                <p class="library-modal-note">Formato: JSON propio de la app. Al importarlo se sustituirán los datos locales actuales por los del backup.</p>
+                ${state.backupUi.status ? `<p class="status library-status" style="margin-top:0;max-width:none;">${escapeHtml(state.backupUi.status)}</p>` : ''}
+              </div>
+            </aside>
+          ` : ''}
         </div>`;
 
       $('#epubInput').addEventListener('change', async (e) => {
@@ -3773,14 +4043,24 @@
           closeLibraryMenu();
         }
       });
-      document.addEventListener('click', (e) => {
+      if (libraryOutsideClickHandler) {
+        document.removeEventListener('click', libraryOutsideClickHandler);
+      }
+      libraryOutsideClickHandler = (e) => {
         if (!libraryActionsMenu || libraryActionsMenu.classList.contains('hidden')) return;
         if (libraryActionsMenu.contains(e.target) || libraryMenuToggleBtn?.contains(e.target)) return;
         closeLibraryMenu();
-      });
+      };
+      document.addEventListener('click', libraryOutsideClickHandler);
       $('#openVocabBtn').addEventListener('click', () => {
         closeLibraryMenu();
         renderVocabularyView();
+      });
+      $('#openBackupModalBtn')?.addEventListener('click', () => {
+        closeLibraryMenu();
+        state.backupUi.isOpen = true;
+        state.backupUi.status = '';
+        renderLibraryView();
       });
       $('#openTranslationsBtn')?.addEventListener('click', () => {
         closeLibraryMenu();
@@ -3804,6 +4084,60 @@
         $('#dictPackInput')?.click();
       });
       $('#refreshStaticCacheBtn').addEventListener('click', () => closeLibraryMenu());
+      const closeBackupModal = () => {
+        state.backupUi.isOpen = false;
+        state.backupUi.isBusy = false;
+        state.backupUi.status = '';
+        renderLibraryView();
+      };
+      $('#closeBackupModalBtn')?.addEventListener('click', closeBackupModal);
+      app.querySelector('[data-close-backup-modal="1"]')?.addEventListener('click', closeBackupModal);
+      $('#exportAppBackupBtn')?.addEventListener('click', async () => {
+        state.backupUi.isBusy = true;
+        state.backupUi.status = 'Preparando backup…';
+        renderLibraryView();
+        try {
+          const result = await downloadAppBackup();
+          const booksCount = result.summary?.byStore?.books || 0;
+          const vocabCount = result.summary?.byStore?.vocabEntries || 0;
+          state.backupUi.status = `Backup descargado (${booksCount} libros, ${vocabCount} entradas de vocabulario). Archivo: ${result.fileName}`;
+        } catch (error) {
+          console.error(error);
+          state.backupUi.status = `Error exportando backup: ${error?.message || error}`;
+        } finally {
+          state.backupUi.isBusy = false;
+          state.backupUi.isOpen = true;
+          renderLibraryView();
+        }
+      });
+      $('#triggerImportBackupBtn')?.addEventListener('click', () => {
+        if (state.backupUi.isBusy) return;
+        $('#backupImportInput')?.click();
+      });
+      $('#backupImportInput')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0] || null;
+        e.target.value = '';
+        if (!file) return;
+        const confirmed = confirm('¿Importar este backup y sustituir los datos locales actuales de la app en este navegador?');
+        if (!confirmed) return;
+        state.backupUi.isBusy = true;
+        state.backupUi.isOpen = true;
+        state.backupUi.status = `Importando ${file.name}…`;
+        renderLibraryView();
+        try {
+          const result = await importAppBackup(file);
+          const booksCount = result.summary?.byStore?.books || 0;
+          const vocabCount = result.summary?.byStore?.vocabEntries || 0;
+          state.backupUi.status = `Backup importado (${booksCount} libros, ${vocabCount} entradas de vocabulario). Exportado originalmente: ${formatDate(result.exportedAt)}.`;
+        } catch (error) {
+          console.error(error);
+          state.backupUi.status = `Error importando backup: ${error?.message || error}`;
+        } finally {
+          state.backupUi.isBusy = false;
+          state.backupUi.isOpen = true;
+          renderLibraryView();
+        }
+      });
       $('#dictPackInput').addEventListener('change', async (e) => {
         const files = [...(e.target.files || [])];
         if (!files.length) return;
