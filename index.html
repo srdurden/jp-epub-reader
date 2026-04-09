@@ -3781,6 +3781,17 @@
                 <button id="saveGeminiConfigBtn" class="library-action-btn" type="button">Guardar</button>
                 <button id="clearGeminiConfigBtn" class="library-action-btn" type="button">Borrar</button>
               </div>
+              <div class="reader-menu-section">
+                <h2 style="margin:0;">Acciones</h2>
+                <div class="library-actions-row">
+                  <button id="openBackupFromSettingsBtn" class="library-action-btn" type="button">Exportar / importar</button>
+                  <button id="importDictPackFromSettingsBtn" class="library-action-btn" type="button" title="Importar dictionary pack local">Importar diccionario</button>
+                  <button id="refreshStaticCacheFromSettingsBtn" class="library-action-btn" type="button" title="Actualizar shell offline y recargar">Refrescar</button>
+                </div>
+                <input id="dictPackInputSettings" class="hidden" type="file" accept="application/json,.json" multiple />
+                <div class="field-help">La opción Exportar / importar abre el modal de backup en Biblioteca.</div>
+                ${state.dictionaryStatus.importMessage ? `<p class="status library-status">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
+              </div>
             </div>
             <p class="status library-status">${escapeHtml(state.geminiConfigStatus || (isGeminiConfigured ? 'Configuración de Gemini lista.' : 'Añade tu clave API y revisa el modelo y el prompt por defecto.'))}</p>
           </div>
@@ -3819,6 +3830,33 @@
         await saveSettings({ geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL, geminiPrompt: DEFAULT_GEMINI_PROMPT });
         state.geminiConfigStatus = 'Configuración restablecida.';
         renderSettingsView();
+      });
+      $('#openBackupFromSettingsBtn')?.addEventListener('click', () => {
+        state.backupUi.isOpen = true;
+        state.backupUi.status = '';
+        renderLibraryView();
+      });
+      $('#importDictPackFromSettingsBtn')?.addEventListener('click', () => {
+        $('#dictPackInputSettings')?.click();
+      });
+      $('#dictPackInputSettings')?.addEventListener('change', async (e) => {
+        const files = [...(e.target.files || [])];
+        if (!files.length) return;
+        for (const file of files) {
+          try {
+            const packMeta = await importDictionaryPack(file);
+            state.dictionaryStatus.importMessage = `Importado: ${packMeta.name} (${packMeta.entryCount} entradas).`;
+          } catch (err) {
+            console.error(err);
+            state.dictionaryStatus.importMessage = `Error importando ${file.name}: ${err?.message || err}`;
+          }
+        }
+        e.target.value = '';
+        renderSettingsView();
+      });
+      $('#refreshStaticCacheFromSettingsBtn')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await refreshAppShellAndReload();
       });
     }
 
@@ -3883,10 +3921,7 @@
                 <button id="libraryMenuToggleBtn" class="library-menu-toggle" type="button" aria-expanded="false" aria-controls="libraryActionsMenu" title="Abrir menú">☰</button>
                 <div id="libraryActionsMenu" class="library-actions-menu hidden">
                   <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
-                  <button id="openBackupModalBtn" class="library-action-btn">Exportar / importar</button>
                   <button id="openSettingsBtn" class="library-action-btn">Configuración</button>
-                  <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
-                  <button id="refreshStaticCacheBtn" class="library-action-btn" type="button" title="Actualizar shell offline y recargar">Refrescar</button>
                 </div>
               </div>
             </h1>
@@ -4032,12 +4067,6 @@
         closeLibraryMenu();
         renderVocabularyView();
       });
-      $('#openBackupModalBtn')?.addEventListener('click', () => {
-        closeLibraryMenu();
-        state.backupUi.isOpen = true;
-        state.backupUi.status = '';
-        renderLibraryView();
-      });
       $('#openSettingsBtn')?.addEventListener('click', () => {
         closeLibraryMenu();
         renderSettingsView();
@@ -4050,15 +4079,6 @@
           if (e.target.closest('[data-open]')) return;
           openReader(tile.dataset.bookTileOpen);
         });
-      });
-      $('#importDictPackBtn').addEventListener('click', () => {
-        closeLibraryMenu();
-        $('#dictPackInput')?.click();
-      });
-      $('#refreshStaticCacheBtn').addEventListener('click', async (e) => {
-        e.preventDefault();
-        closeLibraryMenu();
-        await refreshAppShellAndReload();
       });
       const closeBackupModal = () => {
         state.backupUi.isOpen = false;
