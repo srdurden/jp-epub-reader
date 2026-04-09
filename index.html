@@ -3727,81 +3727,43 @@
       resetVocabularyListRender();
     }
 
-    async function renderTranslationsView() {
-      state.route = 'translations';
+    async function renderSettingsView() {
+      state.route = 'settings';
       syncDocumentScrollLock();
       const app = $('#app');
       const keyValue = state.settings.azureTranslateKey || '';
       const regionValue = state.settings.azureTranslateRegion || '';
-      const isConfigured = hasAzureTranslatorConfig();
-      app.innerHTML = `
-        <div class="library-shell">
-          <div class="library-card">
-            <div class="toolbar" style="margin-bottom:0;">
-              <button id="backLibraryFromTranslationsBtn" class="library-action-btn" type="button">← Biblioteca</button>
-            </div>
-            <h1 class="library-headline" style="margin-top:14px;">
-              <span class="library-title">Traducciones</span>
-            </h1>
-            <div class="library-toolbar">
-              <div class="reader-menu-section">
-                <label for="azureTranslateKeyInput"><strong>Clave de Azure Translator</strong></label>
-                <input id="azureTranslateKeyInput" type="password" value="${escapeHtml(keyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
-                <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
-              </div>
-              <div class="reader-menu-section">
-                <label for="azureTranslateRegionInput"><strong>Región</strong></label>
-                <input id="azureTranslateRegionInput" type="text" value="${escapeHtml(regionValue)}" placeholder="Ejemplo: westeurope" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
-                <div class="field-help">Endpoint fijo: ${escapeHtml(AZURE_TRANSLATOR_ENDPOINT)}/</div>
-              </div>
-              <div class="library-actions-row">
-                <button id="saveTranslationsConfigBtn" class="library-action-btn" type="button">Guardar</button>
-                <button id="clearTranslationsConfigBtn" class="library-action-btn" type="button">Borrar</button>
-              </div>
-            </div>
-            <p class="status library-status">${escapeHtml(state.translationConfigStatus || (isConfigured ? 'Configuración de Azure Translator lista.' : 'Añade tu clave y tu región para traducir oraciones en modo frase.'))}</p>
-          </div>
-        </div>`;
-
-      $('#backLibraryFromTranslationsBtn')?.addEventListener('click', () => {
-        state.translationConfigStatus = '';
-        renderLibraryView();
-      });
-      $('#saveTranslationsConfigBtn')?.addEventListener('click', async () => {
-        const key = ($('#azureTranslateKeyInput')?.value || '').trim();
-        const region = ($('#azureTranslateRegionInput')?.value || '').trim();
-        await saveSettings({ azureTranslateKey: key, azureTranslateRegion: region });
-        state.translationConfigStatus = key && region
-          ? 'Configuración guardada localmente.'
-          : 'Configuración vacía guardada localmente.';
-        renderTranslationsView();
-      });
-      $('#clearTranslationsConfigBtn')?.addEventListener('click', async () => {
-        await saveSettings({ azureTranslateKey: '', azureTranslateRegion: '' });
-        state.translationConfigStatus = 'Configuración borrada.';
-        renderTranslationsView();
-      });
-    }
-
-    async function renderGeminiView() {
-      state.route = 'gemini';
-      syncDocumentScrollLock();
-      const app = $('#app');
+      const isTranslationsConfigured = hasAzureTranslatorConfig();
       const apiKeyValue = state.settings.geminiApiKey || '';
       const promptValue = state.settings.geminiPrompt || DEFAULT_GEMINI_PROMPT;
       const modelValue = state.settings.geminiModel || DEFAULT_GEMINI_MODEL;
-      const isConfigured = hasGeminiConfig();
+      const isGeminiConfigured = hasGeminiConfig();
       app.innerHTML = `
         <div class="library-shell">
           <div class="library-card">
             <div class="toolbar" style="margin-bottom:0;">
-              <button id="backLibraryFromGeminiBtn" class="library-action-btn" type="button">← Biblioteca</button>
+              <button id="backLibraryFromSettingsBtn" class="library-action-btn" type="button">← Biblioteca</button>
             </div>
             <h1 class="library-headline" style="margin-top:14px;">
-              <span class="library-title">Gemini</span>
+              <span class="library-title">Configuración</span>
             </h1>
             <div class="library-toolbar">
               <div class="reader-menu-section">
+                <h2 style="margin:0;">Traducciones</h2>
+                <label for="azureTranslateKeyInput"><strong>Clave de Azure Translator</strong></label>
+                <input id="azureTranslateKeyInput" type="password" value="${escapeHtml(keyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
+                <label for="azureTranslateRegionInput"><strong>Región</strong></label>
+                <input id="azureTranslateRegionInput" type="text" value="${escapeHtml(regionValue)}" placeholder="Ejemplo: westeurope" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                <div class="field-help">Endpoint fijo: ${escapeHtml(AZURE_TRANSLATOR_ENDPOINT)}/</div>
+                <div class="library-actions-row">
+                  <button id="saveTranslationsConfigBtn" class="library-action-btn" type="button">Guardar</button>
+                  <button id="clearTranslationsConfigBtn" class="library-action-btn" type="button">Borrar</button>
+                </div>
+                <p class="status library-status">${escapeHtml(state.translationConfigStatus || (isTranslationsConfigured ? 'Configuración de Azure Translator lista.' : 'Añade tu clave y tu región para traducir oraciones en modo frase.'))}</p>
+              </div>
+              <div class="reader-menu-section">
+                <h2 style="margin:0;">Gemini</h2>
                 <label for="geminiApiKeyInput"><strong>Clave API</strong></label>
                 <input id="geminiApiKeyInput" type="password" value="${escapeHtml(apiKeyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
                 <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
@@ -3820,13 +3782,28 @@
                 <button id="clearGeminiConfigBtn" class="library-action-btn" type="button">Borrar</button>
               </div>
             </div>
-            <p class="status library-status">${escapeHtml(state.geminiConfigStatus || (isConfigured ? 'Configuración de Gemini lista.' : 'Añade tu clave API y revisa el modelo y el prompt por defecto.'))}</p>
+            <p class="status library-status">${escapeHtml(state.geminiConfigStatus || (isGeminiConfigured ? 'Configuración de Gemini lista.' : 'Añade tu clave API y revisa el modelo y el prompt por defecto.'))}</p>
           </div>
         </div>`;
 
-      $('#backLibraryFromGeminiBtn')?.addEventListener('click', () => {
+      $('#backLibraryFromSettingsBtn')?.addEventListener('click', () => {
+        state.translationConfigStatus = '';
         state.geminiConfigStatus = '';
         renderLibraryView();
+      });
+      $('#saveTranslationsConfigBtn')?.addEventListener('click', async () => {
+        const key = ($('#azureTranslateKeyInput')?.value || '').trim();
+        const region = ($('#azureTranslateRegionInput')?.value || '').trim();
+        await saveSettings({ azureTranslateKey: key, azureTranslateRegion: region });
+        state.translationConfigStatus = key && region
+          ? 'Configuración guardada localmente.'
+          : 'Configuración vacía guardada localmente.';
+        renderSettingsView();
+      });
+      $('#clearTranslationsConfigBtn')?.addEventListener('click', async () => {
+        await saveSettings({ azureTranslateKey: '', azureTranslateRegion: '' });
+        state.translationConfigStatus = 'Configuración borrada.';
+        renderSettingsView();
       });
       $('#saveGeminiConfigBtn')?.addEventListener('click', async () => {
         const apiKey = ($('#geminiApiKeyInput')?.value || '').trim();
@@ -3836,12 +3813,12 @@
         state.geminiConfigStatus = apiKey
           ? 'Configuración guardada localmente.'
           : 'Configuración guardada sin clave API.';
-        renderLibraryView();
+        renderSettingsView();
       });
       $('#clearGeminiConfigBtn')?.addEventListener('click', async () => {
         await saveSettings({ geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL, geminiPrompt: DEFAULT_GEMINI_PROMPT });
         state.geminiConfigStatus = 'Configuración restablecida.';
-        renderGeminiView();
+        renderSettingsView();
       });
     }
 
@@ -3907,8 +3884,7 @@
                 <div id="libraryActionsMenu" class="library-actions-menu hidden">
                   <button id="openVocabBtn" class="library-action-btn">Vocabulario</button>
                   <button id="openBackupModalBtn" class="library-action-btn">Exportar / importar</button>
-                  <button id="openTranslationsBtn" class="library-action-btn">Traducciones</button>
-                  <button id="openGeminiBtn" class="library-action-btn">Gemini</button>
+                  <button id="openSettingsBtn" class="library-action-btn">Configuración</button>
                   <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
                   <button id="refreshStaticCacheBtn" class="library-action-btn" type="button" title="Actualizar shell offline y recargar">Refrescar</button>
                 </div>
@@ -4062,13 +4038,9 @@
         state.backupUi.status = '';
         renderLibraryView();
       });
-      $('#openTranslationsBtn')?.addEventListener('click', () => {
+      $('#openSettingsBtn')?.addEventListener('click', () => {
         closeLibraryMenu();
-        renderTranslationsView();
-      });
-      $('#openGeminiBtn')?.addEventListener('click', () => {
-        closeLibraryMenu();
-        renderGeminiView();
+        renderSettingsView();
       });
 
       app.querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => openReader(btn.dataset.open)));
