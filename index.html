@@ -1321,6 +1321,10 @@
         lastImportedAt: null,
         importMessage: ''
       },
+      dictionaryAnalysisIndex: {
+        surfaceMap: new Map(),
+        lemmaMap: new Map()
+      },
       backupUi: {
         isOpen: false,
         isBusy: false,
@@ -2132,6 +2136,34 @@
       return 'word';
     }
 
+    const TOKEN_ANALYSIS_VERSION = 'jp-token-v3';
+    const MAX_JAPANESE_SPAN_TOKENS = 5;
+    const PARTICLE_SURFACES = new Set(['の','は','が','を','に','へ','と','も','や','か','ね','よ','な','わ','ぞ','さ']);
+    const INFLECTION_CONTINUATION_SET = new Set([
+      'っ','て','で','た','だ','ない','なかった','ます','ました','ません','たい','たくない',
+      'んで','んだ','いて','いで','して','した','れる','られる','せる','させる','くない','かった','そう',
+      'ている','でいる','てる','でる','ちゃう','じゃう','いた','いだ'
+    ]);
+
+    function isKanaOnly(text) {
+      return /^[ぁ-ゖァ-ヺー]+$/u.test(text || '');
+    }
+
+    function isSingleKanji(text) {
+      return /^[\p{Script=Han}]$/u.test(text || '');
+    }
+
+    function isLikelyParticleSurface(surface) {
+      return PARTICLE_SURFACES.has(normalizeTokenSurface(surface || ''));
+    }
+
+    function isJapaneseMergeableRawToken(rawToken) {
+      if (!rawToken?.surface || !rawToken.surface.trim()) return false;
+      const tokenType = classifyToken(rawToken.surface);
+      if (tokenType === 'punct' || tokenType === 'space' || tokenType === 'empty') return false;
+      return isJapaneseText(rawToken.surface);
+    }
+
     // =========================
     // [NUEVO Fase 2] Japanese tokenization layer
     // =========================
@@ -2179,6 +2211,227 @@
       return fallback;
     }
 
+    function collectJapaneseTokenRuns(rawTokens) {
+      const runs = [];
+      let cursor = 0;
+      while (cursor < rawTokens.length) {
+        if (!isJapaneseMergeableRawToken(rawTokens[cursor])) {
+          cursor += 1;
+          continue;
+        }
+        const start = cursor;
+        while (cursor < rawTokens.length && isJapaneseMergeableRawToken(rawTokens[cursor])) {
+          cursor += 1;
+        }
+        runs.push({ start, end: cursor, tokens: rawTokens.slice(start, cursor) });
+      }
+      return runs;
+    }
+
+    function getDictionaryAnalysisIndexEntry(surfaceKey) {
+      const index = state.dictionaryAnalysisIndex;
+      if (!index || !surfaceKey) return null;
+      return index.surfaceMap.get(surfaceKey) || null;
+    }
+
+    function resolveTokenAnalysisFromDictionary(surface, context = {}) {
+      const normalizedSurface = normalizeTokenSurface(surface || '');
+      if (!normalizedSurface) return null;
+      const cache = context.analysisMemo || new Map();
+      const memoKey = `dict::${normalizedSurface}`;
+      if (cache.has(memoKey)) return cache.get(memoKey);
+      const result = {
+        baseForm: normalizedSurface,
+        pos: 'word',
+        reading: null,
+        analysisSource: 'heuristic',
+        analysisScore: 0
+      };
+      const surfaceKey = normalizeLookupKey(normalizedSurface);
+      const exactSurface = getDictionaryAnalysisIndexEntry(surfaceKey);
+      if (exactSurface?.lemma) {
+        result.baseForm = exactSurface.lemma || normalizedSurface;
+        result.pos = exactSurface.pos || result.pos;
+        result.reading = exactSurface.readingKana || null;
+        result.analysisSource = 'exact-dict';
+        result.analysisScore = 120;
+        cache.set(memoKey, result);
+        return result;
+      }
+
+      const deinflections = applyDeinflectionRules(normalizedSurface);
+      const lemmaMap = state.dictionaryAnalysisIndex?.lemmaMap || new Map();
+      for (const d of deinflections) {
+        const key = normalizeLookupKey(d.form);
+        if (!key) continue;
+        const lemmaMatch = lemmaMap.get(key) || getDictionaryAnalysisIndexEntry(key);
+        if (!lemmaMatch?.lemma) continue;
+        result.baseForm = lemmaMatch.lemma || d.form;
+        result.pos = lemmaMatch.pos || result.pos;
+        result.reading = lemmaMatch.readingKana || null;
+        result.analysisSource = d.reason === 'exact' ? 'exact-dict' : 'deinflected-dict';
+        result.analysisScore = d.reason === 'exact' ? 115 : 95;
+        cache.set(memoKey, result);
+        return result;
+      }
+      cache.set(memoKey, result);
+      return result;
+    }
+
+    function scoreJapaneseSpanCandidate(candidate, context = {}) {
+      const spanSurface = candidate.surface;
+      const partSurfaces = candidate.parts.map((p) => normalizeTokenSurface(p.surface || ''));
+      let score = 0;
+      const analysis = resolveTokenAnalysisFromDictionary(spanSurface, context);
+      if (analysis?.analysisSource === 'exact-dict') score += 120;
+      if (analysis?.analysisSource === 'deinflected-dict') score += 96;
+
+      if (candidate.parts.length > 1) score += 8;
+      const joinedContainsParticle = partSurfaces.some((s, idx) => idx > 0 && isLikelyParticleSurface(s));
+      if (joinedContainsParticle) score -= 120;
+
+      const lastPart = partSurfaces[partSurfaces.length - 1] || '';
+      if (candidate.parts.length > 1 && isLikelyParticleSurface(lastPart)) score -= 140;
+
+      const firstPart = partSurfaces[0] || '';
+      if (candidate.parts.length === 1 && isSingleKanji(firstPart)) {
+        const nextPart = normalizeTokenSurface(context.nextSurface || '');
+        if (isKanaOnly(nextPart) && !isLikelyParticleSurface(nextPart)) score -= 28;
+      }
+
+      for (let i = 0; i < partSurfaces.length - 1; i++) {
+        const left = partSurfaces[i];
+        const right = partSurfaces[i + 1];
+        if (isLikelyParticleSurface(right)) continue;
+        if (isSingleKanji(left) && /^[ぁ-ゖ]/u.test(right || '')) score += 24;
+        if (INFLECTION_CONTINUATION_SET.has(right)) score += 20;
+        if (right === 'っぱなし' || right === 'かけ' || right === '上がっ' || right === '上がった') score += 28;
+      }
+
+      if (/[\p{Script=Han}][ぁ-ゖ].*(て|で|た)$/u.test(spanSurface)) score += 20;
+      if (/[\p{Script=Han}][ぁ-ゖ]+っぱなし$/u.test(spanSurface)) score += 42;
+      if (/[\p{Script=Han}][ぁ-ゖ]+かけ(た|て)$/u.test(spanSurface)) score += 36;
+      if (candidate.parts.length >= 4 && isKanaOnly(spanSurface)) score -= 14;
+      if (candidate.parts.length >= 4 && spanSurface.length >= 8) score -= 6;
+      return {
+        ...candidate,
+        analysis,
+        score
+      };
+    }
+
+    function buildJapaneseSpanCandidates(runTokens, startIndex, maxSpan = MAX_JAPANESE_SPAN_TOKENS) {
+      const candidates = [];
+      const cap = Math.min(runTokens.length, startIndex + maxSpan);
+      for (let endExclusive = startIndex + 1; endExclusive <= cap; endExclusive++) {
+        const parts = runTokens.slice(startIndex, endExclusive);
+        const surface = parts.map((p) => p.surface || '').join('');
+        candidates.push({
+          startIndex,
+          endIndexExclusive: endExclusive,
+          parts,
+          surface,
+          startOffset: parts[0]?.startOffset ?? 0,
+          endOffset: parts[parts.length - 1]?.endOffset ?? 0
+        });
+      }
+      return candidates;
+    }
+
+    function chooseBestJapaneseTokenPath(scoredByStart, runLength) {
+      const dp = new Array(runLength + 1).fill(null);
+      dp[runLength] = { score: 0, next: null };
+      for (let i = runLength - 1; i >= 0; i--) {
+        const candidates = scoredByStart.get(i) || [];
+        let best = { score: Number.NEGATIVE_INFINITY, next: null };
+        for (const candidate of candidates) {
+          const tail = dp[candidate.endIndexExclusive];
+          if (!tail) continue;
+          const total = candidate.score + tail.score;
+          if (total > best.score) {
+            best = { score: total, next: candidate };
+          }
+        }
+        dp[i] = best.next ? best : { score: 0, next: null };
+      }
+      const path = [];
+      let idx = 0;
+      while (idx < runLength) {
+        const current = dp[idx]?.next;
+        if (!current) {
+          const fallbackPart = scoredByStart.get(idx)?.[0];
+          if (!fallbackPart) break;
+          path.push(fallbackPart);
+          idx += 1;
+          continue;
+        }
+        path.push(current);
+        idx = current.endIndexExclusive;
+      }
+      return path;
+    }
+
+    function analyzeJapaneseTokenRun(runTokens, context = {}) {
+      if (!runTokens.length) return [];
+      const scoredByStart = new Map();
+      for (let startIndex = 0; startIndex < runTokens.length; startIndex++) {
+        const candidates = buildJapaneseSpanCandidates(runTokens, startIndex);
+        const scored = candidates.map((candidate) => {
+          const nextSurface = runTokens[candidate.endIndexExclusive]?.surface || '';
+          return scoreJapaneseSpanCandidate(candidate, { ...context, nextSurface });
+        });
+        scoredByStart.set(startIndex, scored);
+      }
+      const bestPath = chooseBestJapaneseTokenPath(scoredByStart, runTokens.length);
+      return bestPath.map((choice) => ({
+        surface: choice.surface,
+        startOffset: choice.startOffset,
+        endOffset: choice.endOffset,
+        isWordLike: true,
+        rawSpanLength: choice.parts.length,
+        rawStartTokenIndex: choice.startIndex,
+        rawEndTokenIndex: choice.endIndexExclusive - 1,
+        analysis: {
+          baseForm: choice.analysis?.baseForm || normalizeTokenSurface(choice.surface),
+          pos: choice.analysis?.pos || 'word',
+          reading: choice.analysis?.reading || null,
+          source: choice.analysis?.analysisSource || 'merged-span',
+          score: choice.score
+        }
+      }));
+    }
+
+    function mergeJapaneseTokensForDisplayAndLookup(rawTokens, context = {}) {
+      if (!Array.isArray(rawTokens) || !rawTokens.length) return [];
+      const merged = [];
+      const runs = collectJapaneseTokenRuns(rawTokens);
+      if (!runs.length) {
+        return rawTokens.map((raw) => ({ ...raw, rawSpanLength: 1, analysis: null }));
+      }
+      let runCursor = 0;
+      let tokenCursor = 0;
+      while (tokenCursor < rawTokens.length) {
+        const run = runs[runCursor];
+        if (!run || tokenCursor < run.start) {
+          const token = rawTokens[tokenCursor];
+          merged.push({ ...token, rawSpanLength: 1, analysis: null });
+          tokenCursor += 1;
+          continue;
+        }
+        const analyzed = analyzeJapaneseTokenRun(run.tokens, context);
+        for (const analyzedToken of analyzed) {
+          merged.push({
+            ...analyzedToken,
+            rawStartTokenIndex: run.start + analyzedToken.rawStartTokenIndex,
+            rawEndTokenIndex: run.start + analyzedToken.rawEndTokenIndex
+          });
+        }
+        tokenCursor = run.end;
+        runCursor += 1;
+      }
+      return merged;
+    }
+
     function buildTokenModel(rawToken, context) {
       const surface = rawToken.surface || '';
       const normalizedSurface = normalizeTokenSurface(surface);
@@ -2196,9 +2449,14 @@
         sentenceIndex: context.sentenceIndex,
         tokenIndex,
         tokenType,
-        pos: tokenType,
-        baseForm: normalizedSurface || surface,
-        reading: null
+        pos: rawToken.analysis?.pos || tokenType,
+        baseForm: rawToken.analysis?.baseForm || normalizedSurface || surface,
+        reading: rawToken.analysis?.reading || null,
+        analysisSource: rawToken.analysis?.source || 'raw-segmenter',
+        analysisScore: Number(rawToken.analysis?.score) || 0,
+        sourceRawTokenCount: Number(rawToken.rawSpanLength) || 1,
+        rawStartTokenIndex: Number.isInteger(rawToken.rawStartTokenIndex) ? rawToken.rawStartTokenIndex : tokenIndex,
+        rawEndTokenIndex: Number.isInteger(rawToken.rawEndTokenIndex) ? rawToken.rawEndTokenIndex : tokenIndex
       };
     }
 
@@ -2219,12 +2477,18 @@
       if (!section) return { sentence: '', tokens: [] };
       const sentences = getSentencesForSection(section);
       const sentence = sentences[sentenceIndex] || '';
-      const cacheKey = `${bookId || 'book'}::${section.path}::${sentenceIndex}::${sentence}`;
+      const cacheKey = `${TOKEN_ANALYSIS_VERSION}::${bookId || 'book'}::${section.path}::${sentenceIndex}::${sentence}`;
       const cached = state.sentenceTokenCache.get(cacheKey);
       if (cached) return cached;
 
       const raw = tokenizeJapaneseText(sentence);
-      const tokens = raw.map((tk, tokenIndex) => buildTokenModel(tk, {
+      const mergedRaw = mergeJapaneseTokensForDisplayAndLookup(raw, {
+        bookId,
+        sectionIndex,
+        sentenceIndex,
+        analysisMemo: new Map()
+      });
+      const tokens = mergedRaw.map((tk, tokenIndex) => buildTokenModel(tk, {
         bookId,
         sectionIndex,
         sentenceIndex,
@@ -2238,6 +2502,75 @@
       if (!section) return [];
       const sentences = getSentencesForSection(section);
       return sentences.map((_, sentenceIndex) => getTokenizedSentence(bookId, sectionIndex, sentenceIndex));
+    }
+
+    function runJapaneseTokenizationSelfTests() {
+      const testCases = [
+        {
+          name: 'Target sentence: segmentation and lemmas',
+          input: '立ちっぱなしのこころを見て、また顔をしかめ、「おなかが痛いなら寝たら」と呼びかけた。',
+          expectedSurfaces: ['立ちっぱなし','の','こころ','を','見て','、','また','顔','を','しかめ','、','「','おなか','が','痛い','なら','寝たら','」','と','呼びかけた','。'],
+          expectedBaseForms: { '見て': '見る', '呼びかけた': '呼びかける' }
+        },
+        {
+          name: '子ども handling',
+          input: '学校のような、病院のような雰囲気のある古い建物の二階から、子どもの声がしていた。',
+          expectedContains: ['子ども','の','声','が','していた']
+        },
+        {
+          name: 'Progressive reading',
+          input: '彼は本を読んでいた。',
+          expectedContains: ['彼','は','本','を','読んでいた','。']
+        },
+        {
+          name: 'Compound verbs',
+          input: '彼女に呼びかけて、立ち上がった。',
+          expectedContains: ['彼女','に','呼びかけて','、','立ち上がった','。']
+        },
+        {
+          name: 'Te-form sanity',
+          input: '見て食べた。',
+          expectedContains: ['見て','食べた','。'],
+          expectedBaseForms: { '見て': '見る', '食べた': '食べる' }
+        }
+      ];
+
+      const tokenize = (text) => {
+        const raw = tokenizeJapaneseText(text);
+        const merged = mergeJapaneseTokensForDisplayAndLookup(raw, { analysisMemo: new Map() });
+        return merged.map((tk, tokenIndex) => buildTokenModel(tk, {
+          bookId: 'selftest',
+          sectionIndex: 0,
+          sentenceIndex: 0,
+          tokenIndex
+        }));
+      };
+      const report = testCases.map((test) => {
+        const tokens = tokenize(test.input);
+        const surfaces = tokens.map((t) => t.surface);
+        const baseMap = Object.fromEntries(tokens.map((t) => [t.surface, t.baseForm]));
+        const missingExpected = (test.expectedSurfaces || []).filter((s) => !surfaces.includes(s));
+        const missingContains = (test.expectedContains || []).filter((s) => !surfaces.includes(s));
+        const wrongBase = Object.entries(test.expectedBaseForms || {}).filter(([surface, base]) => baseMap[surface] !== base);
+        return {
+          name: test.name,
+          ok: !missingExpected.length && !missingContains.length && !wrongBase.length,
+          surfaces,
+          baseMap,
+          missingExpected,
+          missingContains,
+          wrongBase
+        };
+      });
+      const passed = report.filter((r) => r.ok).length;
+      const summary = { passed, total: report.length, report };
+      console.table(report.map((r) => ({ name: r.name, ok: r.ok, missing: [...r.missingExpected, ...r.missingContains].join(', ') || '—' })));
+      console.log('runJapaneseTokenizationSelfTests summary', summary);
+      return summary;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.runJapaneseTokenizationSelfTests = runJapaneseTokenizationSelfTests;
     }
 
     function getReaderPaginationContext() {
@@ -2481,6 +2814,8 @@
         `data-surface="${escapeHtml(token.surface)}"`,
         `data-base-form="${escapeHtml(token.baseForm || '')}"`,
         `data-pos="${escapeHtml(token.pos || '')}"`,
+        `data-analysis-source="${escapeHtml(token.analysisSource || 'raw-segmenter')}"`,
+        `data-source-raw-token-count="${Number(token.sourceRawTokenCount) || 1}"`,
         state.settings.tokenDebug ? `data-debug="${escapeHtml(debug)}"` : ''
       ].filter(Boolean).join(' ');
     }
@@ -2902,6 +3237,8 @@
         baseForm: el.dataset.baseForm || normalizeTokenSurface(surface),
         pos: el.dataset.pos || tokenType,
         reading: null,
+        analysisSource: el.dataset.analysisSource || 'raw-segmenter',
+        sourceRawTokenCount: Number(el.dataset.sourceRawTokenCount) || 1,
         isJapanese: isJapaneseText(surface),
         tokenType,
         sectionIndex: Number(el.dataset.sectionIndex),
@@ -2977,19 +3314,13 @@
     function isLikelyInflectionContinuation(surface) {
       const s = normalizeTokenSurface(surface || '');
       if (!s) return false;
-      const blockedParticles = new Set([
-        'の','は','が','を','に','へ','と','も','や','か','ね','よ','な','わ','ぞ','さ'
-      ]);
-      if (blockedParticles.has(s)) return false;
-      const chunks = new Set([
-        'っ','て','で','た','だ','ない','なかった','ます','ました','ません','たい','たくない','たいです',
-        'んで','んだ','いて','いで','して','した','れる','られる','せる','させる','くない','かった','そう'
-      ]);
-      if (chunks.has(s)) return true;
+      if (PARTICLE_SURFACES.has(s)) return false;
+      if (INFLECTION_CONTINUATION_SET.has(s)) return true;
       return /^(ている|でいる|てる|でる|ちゃう|じゃう|かった|くない|ない|ます|ました)$/u.test(s);
     }
 
-    // Reconstruye candidatos de lookup sin alterar la segmentación visual.
+    // Desde v3, la segmentación final ya llega fusionada para display + lookup.
+    // Solo añadimos candidatos conservadores (surface + lemma) y mantenemos un fallback pequeño.
     function buildLookupCandidatesFromContext(token, context = {}) {
       const baseSurface = token?.surface || '';
       if (!baseSurface) return [];
@@ -3002,6 +3333,9 @@
         out.push(value);
       };
       push(baseSurface);
+      if (token?.baseForm && normalizeTokenSurface(token.baseForm) !== normalizeTokenSurface(baseSurface)) {
+        push(token.baseForm);
+      }
 
       const bookId = context.bookId;
       const sectionIndex = Number.isFinite(token?.sectionIndex) ? token.sectionIndex : context.sectionIndex;
@@ -3013,10 +3347,15 @@
       const sentenceTokens = Array.isArray(sentencePayload?.tokens) ? sentencePayload.tokens : [];
       if (!sentenceTokens.length || !sentenceTokens[tokenIndex]) return out;
 
+      if ((token?.sourceRawTokenCount || 1) > 1 || (token?.analysisSource && token.analysisSource !== 'raw-segmenter')) {
+        return out;
+      }
+
       let combined = token.surface || '';
       for (let i = tokenIndex + 1; i < Math.min(sentenceTokens.length, tokenIndex + 4); i++) {
         const nextToken = sentenceTokens[i];
         if (!isLookupJoinableToken(nextToken)) break;
+        if ((nextToken?.sourceRawTokenCount || 1) > 1) break;
         if (!isLikelyInflectionContinuation(nextToken.surface)) break;
         combined += nextToken.surface || '';
         push(combined);
@@ -3109,11 +3448,27 @@
       await dbPut(STORES.dictionaryMeta, { id: 'embeddedInstalled', installed: true, installedAt: new Date().toISOString() });
     }
 
+    function buildDictionaryAnalysisIndex(entries = []) {
+      const surfaceMap = new Map();
+      const lemmaMap = new Map();
+      for (const entry of entries) {
+        const compact = {
+          lemma: entry?.lemma || null,
+          pos: entry?.pos || null,
+          readingKana: entry?.readingKana || null
+        };
+        if (entry?.surfaceKey && !surfaceMap.has(entry.surfaceKey)) surfaceMap.set(entry.surfaceKey, compact);
+        if (entry?.lemmaKey && !lemmaMap.has(entry.lemmaKey)) lemmaMap.set(entry.lemmaKey, compact);
+      }
+      return { surfaceMap, lemmaMap };
+    }
+
     async function loadDictionaryIndexes() {
       const [packs, entries] = await Promise.all([
         dbGetAll(STORES.dictionaryPacks),
         dbGetAll(STORES.dictionaryEntries)
       ]);
+      state.dictionaryAnalysisIndex = buildDictionaryAnalysisIndex(entries);
       state.dictionaryStatus.loadedEntries = entries.length;
       state.dictionaryStatus.packsCount = packs.length;
       state.dictionaryStatus.lastImportedAt = packs.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))[0]?.updatedAt || null;
