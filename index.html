@@ -3855,11 +3855,6 @@
     }
 
     async function refreshStaticResourcesCache() {
-      if (!('caches' in window)) throw new Error('Cache Storage no está disponible en este navegador.');
-      const cacheKeys = await caches.keys();
-      const staticCacheKeys = cacheKeys.filter((key) => key.startsWith('jp-epub-reader-'));
-      await Promise.all(staticCacheKeys.map((key) => caches.delete(key)));
-
       if ('serviceWorker' in navigator) {
         const registration = await navigator.serviceWorker.getRegistration();
         await registration?.update();
@@ -3910,7 +3905,7 @@
                   <button id="openTranslationsBtn" class="library-action-btn">Traducciones</button>
                   <button id="openGeminiBtn" class="library-action-btn">Gemini</button>
                   <button id="importDictPackBtn" class="library-action-btn" title="Importar dictionary pack local">Importar diccionario</button>
-                  <a id="refreshStaticCacheBtn" class="library-action-btn" href="${buildRandomRefreshUrl()}" title="Recargar portada">Refrescar</a>
+                  <button id="refreshStaticCacheBtn" class="library-action-btn" type="button" title="Recargar portada">Refrescar</button>
                 </div>
               </div>
             </h1>
@@ -4083,7 +4078,27 @@
         closeLibraryMenu();
         $('#dictPackInput')?.click();
       });
-      $('#refreshStaticCacheBtn').addEventListener('click', () => closeLibraryMenu());
+      $('#refreshStaticCacheBtn').addEventListener('click', async (e) => {
+        e.preventDefault();
+        closeLibraryMenu();
+        const refreshBtn = e.currentTarget;
+        const previousLabel = refreshBtn?.textContent || 'Refrescar';
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.textContent = 'Refrescando…';
+        }
+        try {
+          await refreshStaticResourcesCache();
+          window.location.replace(buildRandomRefreshUrl());
+        } catch (error) {
+          console.error(error);
+          if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = previousLabel;
+          }
+          alert(`No se pudo refrescar la app: ${error?.message || error}`);
+        }
+      });
       const closeBackupModal = () => {
         state.backupUi.isOpen = false;
         state.backupUi.isBusy = false;
@@ -4721,7 +4736,7 @@
       document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
     }
 
-    const APP_VERSION = '2026.04.09.1';
+    const APP_VERSION = '2026.04.09.2';
 
     function createServiceWorkerSource() {
       return `
@@ -4740,10 +4755,14 @@ async function updateCache(cache, request, response) {
   return response;
 }
 
+function fetchFresh(request) {
+  return fetch(new Request(request, { cache: 'no-store' }));
+}
+
 async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const response = await fetch(request);
+    const response = await fetchFresh(request);
     await updateCache(cache, request, response);
     if (request.mode === 'navigate') {
       await updateCache(cache, NAV_FALLBACK_URL, response);
