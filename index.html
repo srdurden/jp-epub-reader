@@ -2150,7 +2150,7 @@
       return 'word';
     }
 
-    const TOKEN_ANALYSIS_VERSION = 'jp-token-v5';
+    const TOKEN_ANALYSIS_VERSION = 'jp-token-v6';
     const MAX_JAPANESE_SPAN_TOKENS = 8;
     const PARTICLE_SURFACES = new Set(['の','は','が','を','に','へ','と','も']);
     const INFLECTION_CONTINUATION_SET = new Set([
@@ -2254,6 +2254,86 @@
         runs.push({ start, end: cursor, tokens: rawTokens.slice(start, cursor) });
       }
       return runs;
+    }
+
+
+    const RAW_CLAUSE_PREFIXES = ['から','なら','ので','のに','けど','けれど','また','そして','でも'];
+    const RAW_CLAUSE_SUFFIXES = ['から','なら','ので','のに','けど','けれど'];
+    const RAW_INTERNAL_BREAK_SUFFIXES = ['たら'];
+
+    function shouldSplitLeadingParticle(surface, prevSurface) {
+      const chars = [...normalizeTokenSurface(surface || '')];
+      const first = chars[0] || '';
+      const rest = chars.slice(1).join('');
+      if (!first || !rest) return false;
+      if (!PARTICLE_SURFACES.has(first)) return false;
+      if (!prevSurface || !isJapaneseText(prevSurface)) return false;
+      return /^[ぁ-ゖァ-ヺ\p{Script=Han}]/u.test(rest);
+    }
+
+    function splitSuspiciousJapaneseRawToken(rawToken, prevSurface = '') {
+      const surface = normalizeTokenSurface(rawToken?.surface || '');
+      if (!surface || [...surface].length <= 1 || !isJapaneseText(surface) || classifyToken(surface) !== 'word') {
+        return rawToken ? [rawToken] : [];
+      }
+
+      const toRawTokens = (parts) => {
+        const out = [];
+        let offset = rawToken.startOffset ?? 0;
+        for (const part of parts) {
+          const len = [...part].length;
+          out.push({
+            surface: part,
+            startOffset: offset,
+            endOffset: offset + len,
+            isWordLike: true
+          });
+          offset += len;
+        }
+        return out;
+      };
+
+      if (shouldSplitLeadingParticle(surface, prevSurface)) {
+        const chars = [...surface];
+        return toRawTokens([chars[0], chars.slice(1).join('')]);
+      }
+
+      for (const prefix of RAW_CLAUSE_PREFIXES) {
+        if (!surface.startsWith(prefix) || surface.length <= prefix.length) continue;
+        const tail = surface.slice(prefix.length);
+        if (tail && (containsKanji(tail) || /^[ぁ-ゖ]/u.test(tail))) {
+          return toRawTokens([prefix, tail]);
+        }
+      }
+
+      for (const suffix of RAW_CLAUSE_SUFFIXES) {
+        if (!surface.endsWith(suffix) || surface.length <= suffix.length) continue;
+        const head = surface.slice(0, -suffix.length);
+        if (head && (containsKanji(head) || /^[ぁ-ゖ]/u.test(head))) {
+          return toRawTokens([head, suffix]);
+        }
+      }
+
+      for (const boundary of RAW_INTERNAL_BREAK_SUFFIXES) {
+        const idx = surface.indexOf(boundary);
+        if (idx <= 0 || idx + boundary.length >= surface.length) continue;
+        const head = surface.slice(0, idx + boundary.length);
+        const tail = surface.slice(idx + boundary.length);
+        if (tail && (containsKanji(tail) || /^[ぁ-ゖ]/u.test(tail))) {
+          return toRawTokens([head, tail]);
+        }
+      }
+
+      return [rawToken];
+    }
+
+    function refineJapaneseRawTokens(rawTokens) {
+      const out = [];
+      for (const rawToken of rawTokens || []) {
+        const prevSurface = out.length ? out[out.length - 1].surface || '' : '';
+        out.push(...splitSuspiciousJapaneseRawToken(rawToken, prevSurface));
+      }
+      return out;
     }
 
     function getDictionaryAnalysisIndexEntry(surfaceKey) {
@@ -2370,6 +2450,19 @@
       if (/[\p{Script=Han}][ぁ-ゖ].*られそう$/u.test(spanSurface)) score += 62;
       if (candidate.parts.length >= 5 && isKanaOnly(spanSurface)) score -= 10;
       if (candidate.parts.length >= 6 && spanSurface.length >= 10) score -= 6;
+      if (/(て|で)くれたら$/u.test(spanSurface)) score += 72;
+      if (candidate.parts.length > 1 && /^(から|なら|また|でも|そして)/u.test(spanSurface)) score -= 64;
+      if (candidate.parts.length > 1 && /(から|なら|ので|のに|けど|けれど)$/u.test(spanSurface)) score -= 48;
+      if (candidate.parts.length > 1 && /(?:たら)(?!$).+/u.test(spanSurface)) score -= 54;
+      if (containsKanji(spanSurface) && /くな(?:った|って|る|れた|れて|れる)$/u.test(spanSurface)) score -= 82;
+      if (candidate.parts.length > 1 && analysis?.analysisSource === 'heuristic') {
+        for (let i = 0; i < partSurfaces.length - 1; i++) {
+          const left = partSurfaces[i];
+          const right = partSurfaces[i + 1];
+          if (/^[ぁ-ゖー]+$/u.test(left) && /[\p{Script=Han}]/u.test(right)) score -= 36;
+          if (/[\p{Script=Han}]/u.test(left) && /^[ぁ-ゖー]+$/u.test(right) && !isLikelyInflectionContinuation(right)) score -= 18;
+        }
+      }
       return {
         ...candidate,
         analysis,
@@ -2476,19 +2569,108 @@
       }));
     }
 
+    function buildMergedRepairToken(windowTokens, surface, context = {}) {
+      const analysis = resolveTokenAnalysisFromDictionary(surface, context);
+      return {
+        surface,
+        startOffset: windowTokens[0]?.startOffset ?? 0,
+        endOffset: windowTokens[windowTokens.length - 1]?.endOffset ?? 0,
+        isWordLike: true,
+        rawSpanLength: windowTokens.reduce((sum, tk) => sum + (Number(tk.rawSpanLength) || 1), 0),
+        rawStartTokenIndex: Number.isInteger(windowTokens[0]?.rawStartTokenIndex) ? windowTokens[0].rawStartTokenIndex : 0,
+        rawEndTokenIndex: Number.isInteger(windowTokens[windowTokens.length - 1]?.rawEndTokenIndex)
+          ? windowTokens[windowTokens.length - 1].rawEndTokenIndex
+          : windowTokens.length - 1,
+        analysis: {
+          baseForm: analysis?.baseForm || surface,
+          pos: analysis?.pos || 'word',
+          reading: analysis?.reading || null,
+          source: analysis?.analysisSource || 'repair-merge',
+          score: analysis?.analysisScore || 0
+        }
+      };
+    }
+
+    function shouldRepairMergeWindow(windowTokens) {
+      if (!windowTokens.length || windowTokens.length > 3) return false;
+      if (windowTokens.some((tk) => !isJapaneseText(tk.surface || '') || classifyToken(tk.surface || '') !== 'word')) return false;
+      const parts = windowTokens.map((tk) => normalizeTokenSurface(tk.surface || ''));
+      const surface = parts.join('');
+      if (!surface) return false;
+      const allowSingleInternalKanaRepair = windowTokens.length === 3
+        && /^[ぁ-ゖ]$/u.test(parts[1])
+        && parts[2].length <= 2
+        && isLikelyInflectionContinuation(parts[2])
+        && containsKanji(parts[0])
+        && /[ぁ-ゖ]+(った|って|て|た|る)$/u.test(surface);
+      if (isLikelyParticleSurface(parts[0])) return false;
+      if (/^(から|なら|また|でも|そして)/u.test(surface)) return false;
+      if (/(から|なら|ので|のに|けど|けれど)$/u.test(surface)) return false;
+      if (parts.some((part) => isLikelyParticleSurface(part)) && !allowSingleInternalKanaRepair) return false;
+      if (containsKanji(surface) && /くな(?:った|って|る|れた|れて|れる)$/u.test(surface)) return false;
+      if (/(て|で)(いた|いる|くれる|くれた|くれたら|くれて|おく|おいた)$/u.test(surface)) return true;
+      if (windowTokens.length === 2 && parts[0] === 'かもし' && parts[1] === 'れない') return true;
+      if (allowSingleInternalKanaRepair) return true;
+      return false;
+    }
+
+    function repairMergedJapaneseTokens(tokens, context = {}) {
+      const out = [];
+      for (let i = 0; i < tokens.length; i++) {
+        let mergedRepair = null;
+        for (let span = Math.min(3, tokens.length - i); span >= 2; span--) {
+          const window = tokens.slice(i, i + span);
+          if (!shouldRepairMergeWindow(window)) continue;
+          const surface = window.map((tk) => tk.surface || '').join('');
+          mergedRepair = buildMergedRepairToken(window, surface, context);
+          i += span - 1;
+          break;
+        }
+        if (mergedRepair) {
+          out.push(mergedRepair);
+          continue;
+        }
+        const current = { ...tokens[i] };
+        const surface = normalizeTokenSurface(current.surface || '');
+        if (surface === 'な' && i + 1 < tokens.length) {
+          const next = tokens[i + 1];
+          const nextSurface = normalizeTokenSurface(next.surface || '');
+          if (/^(っ|った|って|る|れた|れて|れる)$/u.test(nextSurface)) {
+            out.push({
+              ...current,
+              surface: surface + nextSurface,
+              endOffset: next.endOffset,
+              rawSpanLength: (current.rawSpanLength || 1) + (next.rawSpanLength || 1),
+              rawEndTokenIndex: Number.isInteger(next.rawEndTokenIndex) ? next.rawEndTokenIndex : current.rawEndTokenIndex,
+              analysis: {
+                ...(current.analysis || {}),
+                baseForm: 'なる',
+                source: 'post-merge-naru'
+              }
+            });
+            i += 1;
+            continue;
+          }
+        }
+        out.push(current);
+      }
+      return out;
+    }
+
     function mergeJapaneseTokensForDisplayAndLookup(rawTokens, context = {}) {
       if (!Array.isArray(rawTokens) || !rawTokens.length) return [];
+      const preparedRawTokens = refineJapaneseRawTokens(rawTokens);
       const merged = [];
-      const runs = collectJapaneseTokenRuns(rawTokens);
+      const runs = collectJapaneseTokenRuns(preparedRawTokens);
       if (!runs.length) {
-        return rawTokens.map((raw) => ({ ...raw, rawSpanLength: 1, analysis: null }));
+        return preparedRawTokens.map((raw) => ({ ...raw, rawSpanLength: 1, analysis: null }));
       }
       let runCursor = 0;
       let tokenCursor = 0;
-      while (tokenCursor < rawTokens.length) {
+      while (tokenCursor < preparedRawTokens.length) {
         const run = runs[runCursor];
         if (!run || tokenCursor < run.start) {
-          const token = rawTokens[tokenCursor];
+          const token = preparedRawTokens[tokenCursor];
           merged.push({ ...token, rawSpanLength: 1, analysis: null });
           tokenCursor += 1;
           continue;
@@ -2504,7 +2686,7 @@
         tokenCursor = run.end;
         runCursor += 1;
       }
-      return merged;
+      return repairMergedJapaneseTokens(merged, context);
     }
 
     function buildTokenModel(rawToken, context) {
@@ -2619,9 +2801,9 @@
           expectedContains: ['置いておく','食べられそう','食べて','見ず','支度','始める']
         },
         {
-          name: 'I-adjective adverbial should stay merged',
+          name: 'Particles and auxiliary chains should stay split/merged correctly',
           input: '──お父さんがいてくれたら少しは庇ってくれたかもしれないのに、と苦しくなった。',
-          expectedContains: ['いてくれたら','庇ってくれた','苦しく','なった']
+          expectedSurfaces: ['─','─','お父さん','が','いてくれたら','少し','は','庇ってくれた','かもしれない','の','に','、','と','苦しく','なった','。']
         },
         {
           name: 'Auxiliary kureru chain should deinflect to main verb when possible',
