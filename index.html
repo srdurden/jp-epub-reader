@@ -2150,11 +2150,11 @@
       return 'word';
     }
 
-    const TOKEN_ANALYSIS_VERSION = 'jp-token-v4';
+    const TOKEN_ANALYSIS_VERSION = 'jp-token-v5';
     const MAX_JAPANESE_SPAN_TOKENS = 8;
-    const PARTICLE_SURFACES = new Set(['の','は','が','を','に','へ','と','も','や','か','ね','よ','な','わ','ぞ','さ']);
+    const PARTICLE_SURFACES = new Set(['の','は','が','を','に','へ','と','も']);
     const INFLECTION_CONTINUATION_SET = new Set([
-      'っ','て','で','た','だ','ない','なかった','ます','ました','ません','たい','たくない',
+      'っ','て','で','た','だ','った','ない','なかった','ます','ました','ません','たい','たくない',
       'んで','んだ','いて','いで','して','した','れる','られる','せる','させる','くない','かった','そう',
       'ている','でいる','てる','でる','ちゃう','じゃう','いた','いだ',
       'く','ず','ぬ','くれ','くれる','くれた','くれて',
@@ -2178,7 +2178,7 @@
       const s = normalizeTokenSurface(surface || '');
       if (!s) return false;
       if (INFLECTION_CONTINUATION_SET.has(s)) return true;
-      return /^(っ|て|で|た|だ|く|ず|ぬ|ない|なかった|くない|かった|くれ|くれる|くれた|くれて)$/u.test(s);
+      return /^(っ|て|で|た|だ|く|ず|ぬ|った|ない|なかった|くない|かった|くれ|くれる|くれた|くれて)$/u.test(s);
     }
 
     function isLikelyParticleSurface(surface) {
@@ -2318,15 +2318,19 @@
       if (analysis?.analysisSource === 'deinflected-dict') score += 104;
 
       if (candidate.parts.length > 1) score += 6 + Math.min(candidate.parts.length - 1, 4) * 4;
-      const joinedContainsParticle = partSurfaces.some((s, idx) => idx > 0 && isLikelyParticleSurface(s));
-      if (joinedContainsParticle) score -= 120;
+      const joinedContainsParticle = candidate.parts.length > 1 && partSurfaces.some((s) => isLikelyParticleSurface(s));
+      if (joinedContainsParticle) score -= 520;
 
       const lastPart = partSurfaces[partSurfaces.length - 1] || '';
-      if (candidate.parts.length > 1 && isLikelyParticleSurface(lastPart)) score -= 140;
+      if (candidate.parts.length > 1 && isLikelyParticleSurface(lastPart)) score -= 1200;
 
       const firstPart = partSurfaces[0] || '';
+      if (candidate.parts.length > 1 && isLikelyParticleSurface(firstPart)) score -= 1200;
       if (candidate.parts.length === 1 && isSingleKanji(firstPart)) {
-        if (isKanaOnly(nextSurface) && !isLikelyParticleSurface(nextSurface)) score -= 28;
+        if (isKanaOnly(nextSurface) && !isLikelyParticleSurface(nextSurface)) {
+          const extra = analysis?.analysisSource === 'exact-dict' ? 160 : 90;
+          score -= extra;
+        }
       }
 
       if (candidate.parts.length === 1 && prevSurface && isSuspiciousStandaloneInflectionToken(normalizedSpanSurface) && isJapaneseText(prevSurface)) {
@@ -2337,6 +2341,11 @@
       }
       if (candidate.parts.length === 1 && nextSurface && isLikelyInflectionContinuation(nextSurface) && isJapaneseText(normalizedSpanSurface)) {
         score -= 38;
+      }
+
+      if (candidate.parts.length === 1 && prevSurface && isSingleKanji(prevSurface) && isKanaOnly(normalizedSpanSurface)
+          && !isLikelyParticleSurface(normalizedSpanSurface) && !isSuspiciousStandaloneInflectionToken(normalizedSpanSurface)) {
+        score -= 140;
       }
 
       for (let i = 0; i < partSurfaces.length - 1; i++) {
@@ -2358,6 +2367,7 @@
       if (/(て|で)お(く|いた)$/u.test(spanSurface)) score += 34;
       if (/[\p{Script=Han}][ぁ-ゖ]+っぱなし$/u.test(spanSurface)) score += 42;
       if (/[\p{Script=Han}][ぁ-ゖ]+かけ(た|て)$/u.test(spanSurface)) score += 36;
+      if (/[\p{Script=Han}][ぁ-ゖ].*られそう$/u.test(spanSurface)) score += 62;
       if (candidate.parts.length >= 5 && isKanaOnly(spanSurface)) score -= 10;
       if (candidate.parts.length >= 6 && spanSurface.length >= 10) score -= 6;
       return {
@@ -2370,9 +2380,26 @@
     function buildJapaneseSpanCandidates(runTokens, startIndex, maxSpan = MAX_JAPANESE_SPAN_TOKENS) {
       const candidates = [];
       const cap = Math.min(runTokens.length, startIndex + maxSpan);
+      const firstSurface = normalizeTokenSurface(runTokens[startIndex]?.surface || '');
+      if (isLikelyParticleSurface(firstSurface)) {
+        const parts = runTokens.slice(startIndex, startIndex + 1);
+        candidates.push({
+          startIndex,
+          endIndexExclusive: startIndex + 1,
+          parts,
+          surface: parts[0]?.surface || '',
+          startOffset: parts[0]?.startOffset ?? 0,
+          endOffset: parts[0]?.endOffset ?? 0
+        });
+        return candidates;
+      }
       for (let endExclusive = startIndex + 1; endExclusive <= cap; endExclusive++) {
         const parts = runTokens.slice(startIndex, endExclusive);
         const surface = parts.map((p) => p.surface || '').join('');
+        const normParts = parts.map((p) => normalizeTokenSurface(p.surface || ''));
+        if (parts.length > 1 && normParts.some((s) => isLikelyParticleSurface(s))) continue;
+        const last = normParts[normParts.length - 1] || '';
+        if (parts.length > 1 && isLikelyParticleSurface(last)) continue;
         candidates.push({
           startIndex,
           endIndexExclusive: endExclusive,
@@ -3385,7 +3412,7 @@
       if (!s) return false;
       if (PARTICLE_SURFACES.has(s)) return false;
       if (INFLECTION_CONTINUATION_SET.has(s)) return true;
-      return /^(ている|でいる|てる|でる|ちゃう|じゃう|かった|くない|ない|ます|ました|く|ず|ぬ|くれ|くれる|くれた|くれて|てくれる|でくれる|てくれた|でくれた|てくれて|でくれて|ておく|でおく|ておいた|でおいた)$/u.test(s);
+      return /^(ている|でいる|てる|でる|ちゃう|じゃう|かった|くない|ない|ます|ました|く|ず|ぬ|った|くれ|くれる|くれた|くれて|てくれる|でくれる|てくれた|でくれた|てくれて|でくれて|ておく|でおく|ておいた|でおいた)$/u.test(s);
     }
 
     // Desde v3, la segmentación final ya llega fusionada para display + lookup.
