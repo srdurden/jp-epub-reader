@@ -2094,9 +2094,23 @@
       return sentenceList;
     }
 
+    function stripRubyAnnotationsFromDocument(doc) {
+      if (!doc?.querySelectorAll) return doc;
+      doc.querySelectorAll('rt,rp').forEach((n) => n.remove());
+      doc.querySelectorAll('ruby').forEach((ruby) => {
+        const frag = doc.createDocumentFragment();
+        while (ruby.firstChild) {
+          frag.appendChild(ruby.firstChild);
+        }
+        ruby.replaceWith(frag);
+      });
+      return doc;
+    }
+
     function extractVisibleTextFromSection(html) {
       const doc = parseXhtml(html);
       doc.querySelectorAll('script,style,noscript').forEach((n) => n.remove());
+      stripRubyAnnotationsFromDocument(doc);
       return doc.body?.innerText || doc.documentElement?.textContent || '';
     }
 
@@ -2136,13 +2150,16 @@
       return 'word';
     }
 
-    const TOKEN_ANALYSIS_VERSION = 'jp-token-v3';
-    const MAX_JAPANESE_SPAN_TOKENS = 5;
+    const TOKEN_ANALYSIS_VERSION = 'jp-token-v4';
+    const MAX_JAPANESE_SPAN_TOKENS = 8;
     const PARTICLE_SURFACES = new Set(['の','は','が','を','に','へ','と','も','や','か','ね','よ','な','わ','ぞ','さ']);
     const INFLECTION_CONTINUATION_SET = new Set([
       'っ','て','で','た','だ','ない','なかった','ます','ました','ません','たい','たくない',
       'んで','んだ','いて','いで','して','した','れる','られる','せる','させる','くない','かった','そう',
-      'ている','でいる','てる','でる','ちゃう','じゃう','いた','いだ'
+      'ている','でいる','てる','でる','ちゃう','じゃう','いた','いだ',
+      'く','ず','ぬ','くれ','くれる','くれた','くれて',
+      'てくれる','でくれる','てくれた','でくれた','てくれて','でくれて',
+      'ておく','でおく','ておいた','でおいた'
     ]);
 
     function isKanaOnly(text) {
@@ -2151,6 +2168,17 @@
 
     function isSingleKanji(text) {
       return /^[\p{Script=Han}]$/u.test(text || '');
+    }
+
+    function containsKanji(text) {
+      return /[\p{Script=Han}]/u.test(text || '');
+    }
+
+    function isSuspiciousStandaloneInflectionToken(surface) {
+      const s = normalizeTokenSurface(surface || '');
+      if (!s) return false;
+      if (INFLECTION_CONTINUATION_SET.has(s)) return true;
+      return /^(っ|て|で|た|だ|く|ず|ぬ|ない|なかった|くない|かった|くれ|くれる|くれた|くれて)$/u.test(s);
     }
 
     function isLikelyParticleSurface(surface) {
@@ -2281,12 +2309,15 @@
     function scoreJapaneseSpanCandidate(candidate, context = {}) {
       const spanSurface = candidate.surface;
       const partSurfaces = candidate.parts.map((p) => normalizeTokenSurface(p.surface || ''));
+      const normalizedSpanSurface = normalizeTokenSurface(spanSurface);
+      const prevSurface = normalizeTokenSurface(context.prevSurface || '');
+      const nextSurface = normalizeTokenSurface(context.nextSurface || '');
       let score = 0;
       const analysis = resolveTokenAnalysisFromDictionary(spanSurface, context);
       if (analysis?.analysisSource === 'exact-dict') score += 120;
-      if (analysis?.analysisSource === 'deinflected-dict') score += 96;
+      if (analysis?.analysisSource === 'deinflected-dict') score += 104;
 
-      if (candidate.parts.length > 1) score += 8;
+      if (candidate.parts.length > 1) score += 6 + Math.min(candidate.parts.length - 1, 4) * 4;
       const joinedContainsParticle = partSurfaces.some((s, idx) => idx > 0 && isLikelyParticleSurface(s));
       if (joinedContainsParticle) score -= 120;
 
@@ -2295,8 +2326,17 @@
 
       const firstPart = partSurfaces[0] || '';
       if (candidate.parts.length === 1 && isSingleKanji(firstPart)) {
-        const nextPart = normalizeTokenSurface(context.nextSurface || '');
-        if (isKanaOnly(nextPart) && !isLikelyParticleSurface(nextPart)) score -= 28;
+        if (isKanaOnly(nextSurface) && !isLikelyParticleSurface(nextSurface)) score -= 28;
+      }
+
+      if (candidate.parts.length === 1 && prevSurface && isSuspiciousStandaloneInflectionToken(normalizedSpanSurface) && isJapaneseText(prevSurface)) {
+        score -= 92;
+      }
+      if (candidate.parts.length === 1 && isLikelyInflectionContinuation(normalizedSpanSurface) && prevSurface && isJapaneseText(prevSurface)) {
+        score -= 42;
+      }
+      if (candidate.parts.length === 1 && nextSurface && isLikelyInflectionContinuation(nextSurface) && isJapaneseText(normalizedSpanSurface)) {
+        score -= 38;
       }
 
       for (let i = 0; i < partSurfaces.length - 1; i++) {
@@ -2304,15 +2344,22 @@
         const right = partSurfaces[i + 1];
         if (isLikelyParticleSurface(right)) continue;
         if (isSingleKanji(left) && /^[ぁ-ゖ]/u.test(right || '')) score += 24;
-        if (INFLECTION_CONTINUATION_SET.has(right)) score += 20;
+        if (INFLECTION_CONTINUATION_SET.has(right)) score += 28;
+        if (isLikelyInflectionContinuation(right)) score += 10;
         if (right === 'っぱなし' || right === 'かけ' || right === '上がっ' || right === '上がった') score += 28;
       }
 
-      if (/[\p{Script=Han}][ぁ-ゖ].*(て|で|た)$/u.test(spanSurface)) score += 20;
+      if (analysis?.analysisSource === 'deinflected-dict' && candidate.parts.length > 1) score += 22;
+      if (analysis?.analysisSource === 'exact-dict' && candidate.parts.length > 1) score += 10;
+      if (/[\p{Script=Han}][ぁ-ゖ].*(て|で|た)$/u.test(spanSurface)) score += 24;
+      if (/[\p{Script=Han}][ぁ-ゖ].*ず$/u.test(spanSurface)) score += 34;
+      if (containsKanji(spanSurface) && /く$/u.test(spanSurface)) score += 20;
+      if (/(て|で)くれ(た|て|る)$/u.test(spanSurface)) score += 54;
+      if (/(て|で)お(く|いた)$/u.test(spanSurface)) score += 34;
       if (/[\p{Script=Han}][ぁ-ゖ]+っぱなし$/u.test(spanSurface)) score += 42;
       if (/[\p{Script=Han}][ぁ-ゖ]+かけ(た|て)$/u.test(spanSurface)) score += 36;
-      if (candidate.parts.length >= 4 && isKanaOnly(spanSurface)) score -= 14;
-      if (candidate.parts.length >= 4 && spanSurface.length >= 8) score -= 6;
+      if (candidate.parts.length >= 5 && isKanaOnly(spanSurface)) score -= 10;
+      if (candidate.parts.length >= 6 && spanSurface.length >= 10) score -= 6;
       return {
         ...candidate,
         analysis,
@@ -2376,9 +2423,10 @@
       const scoredByStart = new Map();
       for (let startIndex = 0; startIndex < runTokens.length; startIndex++) {
         const candidates = buildJapaneseSpanCandidates(runTokens, startIndex);
+        const prevSurface = runTokens[startIndex - 1]?.surface || '';
         const scored = candidates.map((candidate) => {
           const nextSurface = runTokens[candidate.endIndexExclusive]?.surface || '';
-          return scoreJapaneseSpanCandidate(candidate, { ...context, nextSurface });
+          return scoreJapaneseSpanCandidate(candidate, { ...context, prevSurface, nextSurface });
         });
         scoredByStart.set(startIndex, scored);
       }
@@ -2532,6 +2580,27 @@
           input: '見て食べた。',
           expectedContains: ['見て','食べた','。'],
           expectedBaseForms: { '見て': '見る', '食べた': '食べる' }
+        },
+        {
+          name: 'Ta-form should stay merged',
+          input: 'スクールで食べるように作ったお弁当は、じゃあ、家で食べるのね。',
+          expectedContains: ['作った']
+        },
+        {
+          name: 'Classical negative should stay merged',
+          input: 'そこ、置いておくから食べられそうなら食べて」こころの目を見ず、自分の朝の支度を始める。',
+          expectedContains: ['置いておく','食べられそう','食べて','見ず','支度','始める']
+        },
+        {
+          name: 'I-adjective adverbial should stay merged',
+          input: '──お父さんがいてくれたら少しは庇ってくれたかもしれないのに、と苦しくなった。',
+          expectedContains: ['いてくれたら','庇ってくれた','苦しく','なった']
+        },
+        {
+          name: 'Auxiliary kureru chain should deinflect to main verb when possible',
+          input: '彼が庇ってくれた。',
+          expectedContains: ['庇ってくれた'],
+          expectedBaseForms: { '庇ってくれた': '庇う' }
         }
       ];
 
@@ -3316,7 +3385,7 @@
       if (!s) return false;
       if (PARTICLE_SURFACES.has(s)) return false;
       if (INFLECTION_CONTINUATION_SET.has(s)) return true;
-      return /^(ている|でいる|てる|でる|ちゃう|じゃう|かった|くない|ない|ます|ました)$/u.test(s);
+      return /^(ている|でいる|てる|でる|ちゃう|じゃう|かった|くない|ない|ます|ました|く|ず|ぬ|くれ|くれる|くれた|くれて|てくれる|でくれる|てくれた|でくれた|てくれて|でくれて|ておく|でおく|ておいた|でおいた)$/u.test(s);
     }
 
     // Desde v3, la segmentación final ya llega fusionada para display + lookup.
@@ -3515,6 +3584,20 @@
       });
     }
 
+    function convertGodanNegativeStemToDictionaryForm(stem) {
+      const normalizedStem = normalizeTokenSurface(stem || '');
+      if (!normalizedStem) return null;
+      const chars = [...normalizedStem];
+      const last = chars.pop();
+      const map = new Map([
+        ['わ', 'う'], ['か', 'く'], ['が', 'ぐ'], ['さ', 'す'], ['た', 'つ'],
+        ['な', 'ぬ'], ['ば', 'ぶ'], ['ま', 'む'], ['ら', 'る']
+      ]);
+      const replacement = map.get(last);
+      if (!replacement) return null;
+      return chars.join('') + replacement;
+    }
+
     function applyDeinflectionRules(surface) {
       const s = normalizeTokenSurface(surface || '');
       if (!s) return [];
@@ -3531,7 +3614,7 @@
       const rules = [
         ['ませんでした', 'る', 'polite-negative-past'], ['ません', 'る', 'polite-negative'],
         ['ました', 'る', 'polite-past'], ['ます', 'る', 'polite'], ['なかった', 'る', 'negative-past'], ['ない', 'る', 'negative'],
-        ['かった', 'い', 'adj-past'], ['くない', 'い', 'adj-negative'],
+        ['かった', 'い', 'adj-past'], ['くない', 'い', 'adj-negative'], ['く', 'い', 'adj-adverbial'],
         ['った', 'う', 'past-godan-u'], ['った', 'つ', 'past-godan-tsu'], ['った', 'る', 'past-godan-ru'],
         ['いて', 'く', 'te-godan-ku'], ['いた', 'く', 'past-godan-ku'],
         ['いで', 'ぐ', 'te-godan-gu'], ['いだ', 'ぐ', 'past-godan-gu'],
@@ -3547,6 +3630,36 @@
       for (const [suffix, replacement, reason] of rules) {
         if (s.endsWith(suffix) && s.length > suffix.length) {
           add(s.slice(0, -suffix.length) + replacement, reason);
+        }
+      }
+
+      if ((s.endsWith('ず') || s.endsWith('ぬ')) && s.length > 1) {
+        const stem = s.slice(0, -1);
+        add(stem + 'る', s.endsWith('ず') ? 'classical-negative-zu-ichidan' : 'classical-negative-nu-ichidan');
+        const godanForm = convertGodanNegativeStemToDictionaryForm(stem);
+        if (godanForm) add(godanForm, s.endsWith('ず') ? 'classical-negative-zu-godan' : 'classical-negative-nu-godan');
+        if (stem.endsWith('し')) add(stem.slice(0, -1) + 'する', s.endsWith('ず') ? 'classical-negative-zu-suru' : 'classical-negative-nu-suru');
+        if (stem.endsWith('こ')) add(stem.slice(0, -1) + 'くる', s.endsWith('ず') ? 'classical-negative-zu-kuru' : 'classical-negative-nu-kuru');
+      }
+
+      const recursiveAuxRules = [
+        ['てくれた', 'て', 'aux-kureru-past'],
+        ['でくれた', 'で', 'aux-kureru-past'],
+        ['てくれる', 'て', 'aux-kureru-nonpast'],
+        ['でくれる', 'で', 'aux-kureru-nonpast'],
+        ['てくれて', 'て', 'aux-kureru-te'],
+        ['でくれて', 'で', 'aux-kureru-te'],
+        ['ておいた', 'て', 'aux-oku-past'],
+        ['でおいた', 'で', 'aux-oku-past'],
+        ['ておく', 'て', 'aux-oku'],
+        ['でおく', 'で', 'aux-oku']
+      ];
+      for (const [suffix, bridge, reason] of recursiveAuxRules) {
+        if (!s.endsWith(suffix) || s.length <= suffix.length) continue;
+        const bridgeSurface = s.slice(0, -suffix.length) + bridge;
+        for (const d of applyDeinflectionRules(bridgeSurface)) {
+          if (d.form === s) continue;
+          add(d.form, `${reason}::${d.reason}`);
         }
       }
       return out;
