@@ -1319,6 +1319,8 @@
     const AZURE_TRANSLATOR_ENDPOINT = 'https://api.cognitive.microsofttranslator.com';
     const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
     const DEFAULT_GEMINI_PROMPT = 'Responde únicamente repitiendo la palabra + la palabra en hiragana entre parentesis + la definición en castellano ( por ej.  "仕方ない - しかたない  - No se puede evitar / No hay remedio"). La palabra a definir ahora es: ';
+    const DEFAULT_CHATGPT_WORD_PROMPT = 'Dame la lectura en hiragana y la traducción de ';
+    const DEFAULT_CHATGPT_SENTENCE_PROMPT = 'Dame la traducción y explícame la gramática y cada palabra de la frase: ';
     const DEFAULT_SETTINGS = {
       theme: 'light',
       fontSize: 18,
@@ -1329,7 +1331,9 @@
       azureTranslateRegion: '',
       geminiApiKey: '',
       geminiPrompt: DEFAULT_GEMINI_PROMPT,
-      geminiModel: DEFAULT_GEMINI_MODEL
+      geminiModel: DEFAULT_GEMINI_MODEL,
+      chatgptWordPrompt: DEFAULT_CHATGPT_WORD_PROMPT,
+      chatgptSentencePrompt: DEFAULT_CHATGPT_SENTENCE_PROMPT
     };
     const BACKUP_FORMAT = 'jp_epub_reader_backup';
     const BACKUP_FILE_VERSION = 1;
@@ -2050,6 +2054,31 @@
     function hasGeminiConfig() {
       const { apiKey, model } = getGeminiConfig();
       return Boolean(apiKey && normalizeGeminiModel(model));
+    }
+
+    function getChatGptConfig() {
+      return {
+        wordPrompt: state.settings.chatgptWordPrompt || DEFAULT_CHATGPT_WORD_PROMPT,
+        sentencePrompt: state.settings.chatgptSentencePrompt || DEFAULT_CHATGPT_SENTENCE_PROMPT
+      };
+    }
+
+    function openChatGptWithPrompt(text, promptPrefix, options = {}) {
+      const targetText = `${text || ''}`.trim();
+      if (!targetText) return;
+      const prefix = (promptPrefix || '').trim();
+      const prompt = prefix
+        ? `${prefix}${options.wrapInQuotes ? `"${targetText}"` : targetText}`
+        : targetText;
+      const url = 'https://chatgpt.com/?q=' + encodeURIComponent(prompt);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
+    function openGoogleTranslateWithText(text) {
+      const targetText = `${text || ''}`.trim();
+      if (!targetText) return;
+      const url = 'https://translate.google.com/?sl=ja&tl=es&op=translate&text=' + encodeURIComponent(targetText);
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
 
     function resetSentenceTranslation() {
@@ -3810,16 +3839,12 @@
       });
       $('#askChatgptBtn')?.addEventListener('click', () => {
         const promptWord = entry.surface || token.surface || token.baseForm || '';
-        if (!promptWord.trim()) return;
-        const prompt = `Dame la lectura en hiragana y la traducción de "${promptWord}"`;
-        const url = 'https://chatgpt.com/?q=' + encodeURIComponent(prompt);
-        window.open(url, '_blank', 'noopener,noreferrer');
+        const { wordPrompt } = getChatGptConfig();
+        openChatGptWithPrompt(promptWord, wordPrompt, { wrapInQuotes: true });
       });
       $('#openGoogleTranslateBtn')?.addEventListener('click', () => {
         const promptWord = entry.surface || token.surface || token.baseForm || '';
-        if (!promptWord.trim()) return;
-        const url = 'https://translate.google.com/?sl=ja&tl=es&op=translate&text=' + encodeURIComponent(promptWord);
-        window.open(url, '_blank', 'noopener,noreferrer');
+        openGoogleTranslateWithText(promptWord);
       });
       $('#openKanshudoBtn')?.addEventListener('click', () => {
         const promptWord = entry.surface || token.surface || token.baseForm || '';
@@ -4804,6 +4829,8 @@
       const apiKeyValue = state.settings.geminiApiKey || '';
       const promptValue = state.settings.geminiPrompt || DEFAULT_GEMINI_PROMPT;
       const modelValue = state.settings.geminiModel || DEFAULT_GEMINI_MODEL;
+      const chatGptWordPromptValue = state.settings.chatgptWordPrompt || DEFAULT_CHATGPT_WORD_PROMPT;
+      const chatGptSentencePromptValue = state.settings.chatgptSentencePrompt || DEFAULT_CHATGPT_SENTENCE_PROMPT;
       const isGeminiConfigured = hasGeminiConfig();
       app.innerHTML = `
         <div class="library-shell">
@@ -4843,6 +4870,15 @@
                 <label for="geminiPromptInput"><strong>Prompt</strong></label>
                 <textarea id="geminiPromptInput" rows="5" placeholder="Escribe aquí el prompt base" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:150px;border-radius:18px;padding:12px 16px;">${escapeHtml(promptValue)}</textarea>
                 <div class="field-help">Al pulsar ? en una palabra, se concatena este prompt con la palabra del popup.</div>
+              </div>
+              <div class="reader-menu-section">
+                <h2 style="margin:0;">ChatGPT</h2>
+                <label for="chatgptWordPromptInput"><strong>Prompt popup de palabras</strong></label>
+                <textarea id="chatgptWordPromptInput" rows="3" placeholder="Prompt para palabra" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:110px;border-radius:18px;padding:12px 16px;">${escapeHtml(chatGptWordPromptValue)}</textarea>
+                <div class="field-help">Se concatena este prompt con la palabra seleccionada y se envía a ChatGPT.</div>
+                <label for="chatgptSentencePromptInput"><strong>Prompt modo frase</strong></label>
+                <textarea id="chatgptSentencePromptInput" rows="3" placeholder="Prompt para frase" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:110px;border-radius:18px;padding:12px 16px;">${escapeHtml(chatGptSentencePromptValue)}</textarea>
+                <div class="field-help">Se concatena este prompt con la frase actual y se envía a ChatGPT.</div>
               </div>
               <div class="library-actions-row">
                 <button id="saveGeminiConfigBtn" class="library-action-btn" type="button">Guardar</button>
@@ -4887,14 +4923,28 @@
         const apiKey = ($('#geminiApiKeyInput')?.value || '').trim();
         const model = normalizeGeminiModel(($('#geminiModelInput')?.value || '').trim());
         const prompt = ($('#geminiPromptInput')?.value || '').trim() || DEFAULT_GEMINI_PROMPT;
-        await saveSettings({ geminiApiKey: apiKey, geminiModel: model, geminiPrompt: prompt });
+        const chatgptWordPrompt = ($('#chatgptWordPromptInput')?.value || '').trim() || DEFAULT_CHATGPT_WORD_PROMPT;
+        const chatgptSentencePrompt = ($('#chatgptSentencePromptInput')?.value || '').trim() || DEFAULT_CHATGPT_SENTENCE_PROMPT;
+        await saveSettings({
+          geminiApiKey: apiKey,
+          geminiModel: model,
+          geminiPrompt: prompt,
+          chatgptWordPrompt,
+          chatgptSentencePrompt
+        });
         state.geminiConfigStatus = apiKey
           ? 'Configuración guardada localmente.'
           : 'Configuración guardada sin clave API.';
         renderSettingsView();
       });
       $('#clearGeminiConfigBtn')?.addEventListener('click', async () => {
-        await saveSettings({ geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL, geminiPrompt: DEFAULT_GEMINI_PROMPT });
+        await saveSettings({
+          geminiApiKey: '',
+          geminiModel: DEFAULT_GEMINI_MODEL,
+          geminiPrompt: DEFAULT_GEMINI_PROMPT,
+          chatgptWordPrompt: DEFAULT_CHATGPT_WORD_PROMPT,
+          chatgptSentencePrompt: DEFAULT_CHATGPT_SENTENCE_PROMPT
+        });
         state.geminiConfigStatus = 'Configuración restablecida.';
         renderSettingsView();
       });
@@ -5287,6 +5337,12 @@
       return `<div class="reader-preview-empty">${escapeHtml(label)}</div>`;
     }
 
+    function getCurrentSentenceText() {
+      return getTokenizedSentence(state.currentBookId, state.currentSpineIndex, state.currentSentenceIndex)?.sentence
+        || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
+        || '';
+    }
+
     function renderPageModeForLocation(location, paginationContext = getReaderPaginationContext(), options = {}) {
       const safeLocation = getNormalizedReaderLocation(location);
       const wrapperClass = options.preview ? 'reader-preview-content' : 'reader-content';
@@ -5317,6 +5373,12 @@
       const translateButtonAttrs = options.preview
         ? 'class="icon-btn" style="font-size:1rem;padding:6px 0;" aria-hidden="true" tabindex="-1"'
         : 'id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;"';
+      const sentenceChatgptAttrs = options.preview
+        ? 'class="chatgpt-btn" aria-hidden="true" tabindex="-1"'
+        : 'id="sentenceChatgptBtn" class="chatgpt-btn"';
+      const sentenceGoogleTranslateAttrs = options.preview
+        ? 'class="chatgpt-btn" aria-hidden="true" tabindex="-1"'
+        : 'id="sentenceGoogleTranslateBtn" class="chatgpt-btn"';
       const translationHtml = renderSentenceTranslationResult({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx }, options);
       const copySentenceAttrs = options.preview
         ? 'class="copy-glyph-btn" title="Copiar frase" aria-hidden="true" tabindex="-1"'
@@ -5355,6 +5417,10 @@
           </div>
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${tokenized.tokenizationMode === 'manual' ? 'Override manual activo.' : ''} ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
           <button ${translateButtonAttrs}>Traducir oración</button>
+          <div class="external-links-row">
+            <button ${sentenceChatgptAttrs}>ChatGPT</button>
+            <button ${sentenceGoogleTranslateAttrs}>Google Translate</button>
+          </div>
           ${translationHtml}
         </div>
       `;
@@ -5569,15 +5635,11 @@
 
       if (state.readingMode === 'sentence') {
         $('#playSentenceBtn')?.addEventListener('click', () => {
-          const currentSentence = getTokenizedSentence(state.currentBookId, state.currentSpineIndex, state.currentSentenceIndex)?.sentence
-            || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
-            || '';
+          const currentSentence = getCurrentSentenceText();
           speakNativeTts(currentSentence, { lang: 'ja-JP' });
         });
         $('#translateSentenceBtn')?.addEventListener('click', async () => {
-          const currentSentence = getTokenizedSentence(state.currentBookId, state.currentSpineIndex, state.currentSentenceIndex)?.sentence
-            || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
-            || '';
+          const currentSentence = getCurrentSentenceText();
           if (!currentSentence.trim()) return;
           state.sentenceTranslation = {
             bookId: state.currentBookId,
@@ -5611,12 +5673,17 @@
           refreshCurrentSentenceTranslationResult();
         });
         $('#copySentenceBtn')?.addEventListener('click', async () => {
-          const currentSentence = getTokenizedSentence(state.currentBookId, state.currentSpineIndex, state.currentSentenceIndex)?.sentence
-            || getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex]
-            || '';
+          const currentSentence = getCurrentSentenceText();
           if (!currentSentence.trim()) return;
           const copied = await copyTextToClipboard(currentSentence.replace(/\s+/gu, ''));
           if (copied) showCopyFeedback($('#copySentenceBtn'));
+        });
+        $('#sentenceGoogleTranslateBtn')?.addEventListener('click', () => {
+          openGoogleTranslateWithText(getCurrentSentenceText());
+        });
+        $('#sentenceChatgptBtn')?.addEventListener('click', () => {
+          const { sentencePrompt } = getChatGptConfig();
+          openChatGptWithPrompt(getCurrentSentenceText(), sentencePrompt);
         });
         $('#openSentenceEditorBtn')?.addEventListener('click', () => {
           const keepMenuOpen = !$('#readerMenu')?.classList.contains('hidden');
@@ -5732,6 +5799,12 @@
       const getPanelWidth = () => swipeSurface.clientWidth || window.innerWidth || 1;
       const hasPrev = () => document.getElementById('readerCarousel')?.dataset.hasPrev === '1';
       const hasNext = () => document.getElementById('readerCarousel')?.dataset.hasNext === '1';
+      const shouldIgnoreKeyboardEvent = (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target) return false;
+        if (target.closest('input, textarea, select, [contenteditable="true"]')) return true;
+        return Boolean(target.closest('#tokenPanelHost'));
+      };
 
       const setTrackOffset = (valuePx, options = {}) => {
         if (options.immediate) swipeTrack.classList.add('is-dragging');
@@ -5852,6 +5925,23 @@
         finishGesture();
         resetTrackPosition({ immediate: false });
       });
+
+      if (document.body.dataset.readerKeyboardSwipeAttached !== '1') {
+        document.body.dataset.readerKeyboardSwipeAttached = '1';
+        document.addEventListener('keydown', async (event) => {
+          if (event.defaultPrevented || state.route !== 'reader' || state.readingMode !== 'sentence') return;
+          if (stateGesture.committing || shouldIgnoreKeyboardEvent(event)) return;
+          if (event.key === 'ArrowRight') {
+            if (!hasNext()) return;
+            event.preventDefault();
+            await animateCommit(-1);
+          } else if (event.key === 'ArrowLeft') {
+            if (!hasPrev()) return;
+            event.preventDefault();
+            await animateCommit(1);
+          }
+        });
+      }
     }
 
     // =========================
