@@ -399,24 +399,51 @@
       transition: background-color 120ms ease;
     }
     .token.clickable { cursor: pointer; }
-    .token.jp.unknown-word { background: #dbeafe; border-bottom-color: transparent; }
-    .token.jp.known-learning { background: #fef08a; border-bottom-color: transparent; }
-    .token.jp.known-level-5 { border-bottom-color: transparent; background: transparent; }
+    .token.jp.unknown-word {
+      background: var(--token-level-0-bg, #dbeafe);
+      border-bottom-color: transparent;
+      text-decoration: var(--token-level-0-decoration, none);
+    }
+    .token.jp.known-learning {
+      background: var(--token-level-1-bg, #fef08a);
+      border-bottom-color: transparent;
+      text-decoration: var(--token-level-1-decoration, none);
+    }
+    .token.jp.known-level-5 {
+      border-bottom-color: transparent;
+      background: var(--token-level-5-bg, transparent);
+      text-decoration: var(--token-level-5-decoration, none);
+    }
     .token.punct { opacity: 0.9; }
     .segmented-line.compact .token { border-bottom-color: transparent; }
-    .token.known-level-1 { border-bottom-color: transparent; background: #fef08a; }
+    .token.known-level-1 {
+      border-bottom-color: transparent;
+      background: var(--token-level-1-bg, #fef08a);
+      text-decoration: var(--token-level-1-decoration, none);
+    }
     .token.known-level-2 {
       border-bottom-color: transparent;
-      background: transparent;
-      text-decoration-line: underline;
-      text-decoration-style: dotted;
-      text-decoration-thickness: 2px;
+      background: var(--token-level-2-bg, transparent);
+      text-decoration: var(--token-level-2-decoration, underline dotted);
+      text-decoration-thickness: var(--token-level-2-decoration-thickness, 2px);
       text-underline-offset: 0.16em;
-      text-decoration-color: color-mix(in srgb, currentColor 78%, transparent);
+      text-decoration-color: var(--token-level-2-decoration-color, color-mix(in srgb, currentColor 78%, transparent));
     }
-    .token.known-level-3 { border-bottom-color: transparent; background: transparent; }
-    .token.known-level-4 { border-bottom-color: transparent; background: transparent; }
-    .token.known-level-5 { border-bottom-color: transparent; background: transparent; }
+    .token.known-level-3 {
+      border-bottom-color: transparent;
+      background: var(--token-level-3-bg, transparent);
+      text-decoration: var(--token-level-3-decoration, none);
+    }
+    .token.known-level-4 {
+      border-bottom-color: transparent;
+      background: var(--token-level-4-bg, transparent);
+      text-decoration: var(--token-level-4-decoration, none);
+    }
+    .token.known-level-5 {
+      border-bottom-color: transparent;
+      background: var(--token-level-5-bg, transparent);
+      text-decoration: var(--token-level-5-decoration, none);
+    }
     [data-theme="dark"] .token.jp.unknown-word {
       background: #d1d5db;
       color: #111827;
@@ -425,6 +452,35 @@
     [data-theme="dark"] .token.known-level-1,
     [data-theme="dark"] .token.known-level-2 {
       color: #111827;
+    }
+    .reader-level-settings {
+      display: grid;
+      gap: 10px;
+    }
+    .reader-level-row {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
+    }
+    .reader-level-row label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .reader-level-preview {
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .reader-level-preview .token {
+      padding-inline: 0.32em;
     }
     .reader-content.with-panel { position: relative; }
     #tokenPanelHost {
@@ -1332,9 +1388,29 @@
     const DEFAULT_GEMINI_PROMPT = 'Responde únicamente repitiendo la palabra + la palabra en hiragana entre parentesis + la definición en castellano ( por ej.  "仕方ない - しかたない  - No se puede evitar / No hay remedio"). La palabra a definir ahora es: ';
     const DEFAULT_CHATGPT_WORD_PROMPT = 'Dame la lectura en hiragana y la traducción de ';
     const DEFAULT_CHATGPT_SENTENCE_PROMPT = 'Dame la traducción y explícame la gramática y cada palabra de la frase: ';
+    const READER_LEVEL_IDS = [0, 1, 2, 3, 4, 5];
+    const DEFAULT_READER_LEVEL_STYLES = Object.freeze({
+      light: {
+        0: { bg: '#dbeafe', underline: false },
+        1: { bg: '#fef08a', underline: false },
+        2: { bg: 'transparent', underline: true },
+        3: { bg: 'transparent', underline: false },
+        4: { bg: 'transparent', underline: false },
+        5: { bg: 'transparent', underline: false }
+      },
+      dark: {
+        0: { bg: '#d1d5db', underline: false },
+        1: { bg: '#fef08a', underline: false },
+        2: { bg: 'transparent', underline: true },
+        3: { bg: 'transparent', underline: false },
+        4: { bg: 'transparent', underline: false },
+        5: { bg: 'transparent', underline: false }
+      }
+    });
     const DEFAULT_SETTINGS = {
       theme: 'light',
       fontSize: 18,
+      readerLevelStyles: DEFAULT_READER_LEVEL_STYLES,
       showSegmentation: false,
       tokenDebug: false,
       lastOpenedBookId: null,
@@ -1346,6 +1422,56 @@
       chatgptWordPrompt: DEFAULT_CHATGPT_WORD_PROMPT,
       chatgptSentencePrompt: DEFAULT_CHATGPT_SENTENCE_PROMPT
     };
+
+    function buildDefaultReaderLevelStyles() {
+      return JSON.parse(JSON.stringify(DEFAULT_READER_LEVEL_STYLES));
+    }
+
+    function getSafeCssColor(value, fallback = 'transparent') {
+      const str = String(value || '').trim();
+      if (!str) return fallback;
+      const candidate = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(str) ? str : str;
+      if (!window.CSS?.supports?.('color', candidate)) return fallback;
+      return candidate;
+    }
+
+    function normalizeReaderLevelStyles(raw) {
+      const defaults = buildDefaultReaderLevelStyles();
+      const source = raw && typeof raw === 'object' ? raw : {};
+      for (const themeName of ['light', 'dark']) {
+        const themeStyles = source[themeName] && typeof source[themeName] === 'object' ? source[themeName] : {};
+        for (const level of READER_LEVEL_IDS) {
+          const levelKey = String(level);
+          const incoming = themeStyles[levelKey] && typeof themeStyles[levelKey] === 'object' ? themeStyles[levelKey] : {};
+          defaults[themeName][level] = {
+            bg: getSafeCssColor(incoming.bg, defaults[themeName][level].bg),
+            underline: Boolean(incoming.underline)
+          };
+        }
+      }
+      return defaults;
+    }
+
+    function getReaderLevelStyle(themeName, level) {
+      const resolvedTheme = themeName === 'dark' ? 'dark' : 'light';
+      const normalized = normalizeReaderLevelStyles(state.settings?.readerLevelStyles);
+      return normalized[resolvedTheme][level] || DEFAULT_READER_LEVEL_STYLES[resolvedTheme][level];
+    }
+
+    function applyReaderLevelStyleVariables(themeName = state.settings?.theme) {
+      const resolvedTheme = themeName === 'dark' ? 'dark' : 'light';
+      for (const level of READER_LEVEL_IDS) {
+        const style = getReaderLevelStyle(resolvedTheme, level);
+        const bg = getSafeCssColor(style.bg, DEFAULT_READER_LEVEL_STYLES[resolvedTheme][level].bg);
+        const underline = Boolean(style.underline);
+        document.documentElement.style.setProperty(`--token-level-${level}-bg`, bg);
+        document.documentElement.style.setProperty(`--token-level-${level}-decoration`, underline ? 'underline dotted' : 'none');
+        if (level === 2) {
+          document.documentElement.style.setProperty('--token-level-2-decoration-thickness', underline ? '2px' : '0px');
+          document.documentElement.style.setProperty('--token-level-2-decoration-color', underline ? 'color-mix(in srgb, currentColor 78%, transparent)' : 'transparent');
+        }
+      }
+    }
     const BACKUP_FORMAT = 'jp_epub_reader_backup';
     const BACKUP_FILE_VERSION = 1;
     const BACKUP_STORE_NAMES = Object.freeze(Object.values(STORES));
@@ -1661,12 +1787,21 @@
 
     async function loadSettings() {
       const rec = await dbGet(STORES.settings, SETTINGS_KEY);
-      state.settings = { ...DEFAULT_SETTINGS, ...(rec?.value || {}) };
+      const persisted = rec?.value || {};
+      state.settings = {
+        ...DEFAULT_SETTINGS,
+        ...persisted,
+        readerLevelStyles: normalizeReaderLevelStyles(persisted.readerLevelStyles)
+      };
       applyTheme(state.settings.theme);
     }
 
     async function saveSettings(next) {
-      state.settings = { ...state.settings, ...next };
+      state.settings = {
+        ...state.settings,
+        ...next,
+        readerLevelStyles: normalizeReaderLevelStyles(next?.readerLevelStyles ?? state.settings.readerLevelStyles)
+      };
       await dbPut(STORES.settings, { id: SETTINGS_KEY, value: state.settings });
       applyTheme(state.settings.theme);
     }
@@ -4843,6 +4978,37 @@
       const chatGptWordPromptValue = state.settings.chatgptWordPrompt || DEFAULT_CHATGPT_WORD_PROMPT;
       const chatGptSentencePromptValue = state.settings.chatgptSentencePrompt || DEFAULT_CHATGPT_SENTENCE_PROMPT;
       const isGeminiConfigured = hasGeminiConfig();
+      const currentTheme = state.settings.theme === 'dark' ? 'dark' : 'light';
+      const readerStyles = normalizeReaderLevelStyles(state.settings.readerLevelStyles);
+      const levelLabels = {
+        0: 'Nivel 0 (desconocidas)',
+        1: 'Nivel 1',
+        2: 'Nivel 2',
+        3: 'Nivel 3',
+        4: 'Nivel 4',
+        5: 'Nivel 5'
+      };
+      const readerLevelRowsHtml = READER_LEVEL_IDS.map((level) => {
+        const cfg = readerStyles[currentTheme][level];
+        return `
+          <div class="reader-level-row">
+            <strong>${levelLabels[level]}</strong>
+            <label>
+              <span>Fondo</span>
+              <input type="text" data-reader-level-bg="${level}" value="${escapeHtml(cfg.bg)}" placeholder="#dbeafe o transparent" />
+            </label>
+            <label>
+              <span>Subrayado</span>
+              <input type="checkbox" data-reader-level-underline="${level}" ${cfg.underline ? 'checked' : ''} />
+            </label>
+          </div>
+        `;
+      }).join('');
+      const readerPreviewTokensHtml = READER_LEVEL_IDS.map((level) => {
+        const cfg = readerStyles[currentTheme][level];
+        const styleAttr = `background:${escapeHtml(cfg.bg)};text-decoration:${cfg.underline ? 'underline dotted' : 'none'};`;
+        return `<span class="token jp" style="${styleAttr}">例: Nivel ${level}</span>`;
+      }).join('');
       app.innerHTML = `
         <div class="library-shell">
           <div class="library-card">
@@ -4853,6 +5019,20 @@
               <span class="library-title">Configuración</span>
             </h1>
             <div class="library-toolbar">
+              <div class="reader-menu-section">
+                <h2 style="margin:0;">Lector (${currentTheme === 'dark' ? 'Oscuro' : 'Claro'})</h2>
+                <label for="settingsFontSizeInput"><strong>Tamaño de letra</strong></label>
+                <input id="settingsFontSizeInput" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
+                <div class="field-help">Tamaño actual: <span id="settingsFontSizeValue">${state.settings.fontSize}px</span></div>
+                <div class="reader-level-settings">
+                  ${readerLevelRowsHtml}
+                </div>
+                <div>
+                  <strong>Vista previa</strong>
+                  <div class="reader-level-preview">${readerPreviewTokensHtml}</div>
+                </div>
+                <button id="resetReaderStylesBtn" class="library-action-btn" type="button">Restablecer estilos del tema actual</button>
+              </div>
               <div class="reader-menu-section">
                 <h2 style="margin:0;">Traducciones</h2>
                 <label for="azureTranslateKeyInput"><strong>Clave de Azure Translator</strong></label>
@@ -4915,6 +5095,33 @@
         state.translationConfigStatus = '';
         state.geminiConfigStatus = '';
         renderLibraryView();
+      });
+      $('#settingsFontSizeInput')?.addEventListener('input', async (e) => {
+        const nextSize = Math.max(14, Math.min(30, Number(e.target.value) || 18));
+        $('#settingsFontSizeValue').textContent = `${nextSize}px`;
+        await saveSettings({ fontSize: nextSize });
+      });
+      app.querySelectorAll('[data-reader-level-bg]').forEach((input) => input.addEventListener('input', async (e) => {
+        const level = Number(e.target.dataset.readerLevelBg);
+        if (!Number.isInteger(level)) return;
+        const nextStyles = normalizeReaderLevelStyles(state.settings.readerLevelStyles);
+        nextStyles[currentTheme][level].bg = getSafeCssColor(e.target.value, DEFAULT_READER_LEVEL_STYLES[currentTheme][level].bg);
+        await saveSettings({ readerLevelStyles: nextStyles });
+        renderSettingsView();
+      }));
+      app.querySelectorAll('[data-reader-level-underline]').forEach((input) => input.addEventListener('change', async (e) => {
+        const level = Number(e.target.dataset.readerLevelUnderline);
+        if (!Number.isInteger(level)) return;
+        const nextStyles = normalizeReaderLevelStyles(state.settings.readerLevelStyles);
+        nextStyles[currentTheme][level].underline = Boolean(e.target.checked);
+        await saveSettings({ readerLevelStyles: nextStyles });
+        renderSettingsView();
+      }));
+      $('#resetReaderStylesBtn')?.addEventListener('click', async () => {
+        const nextStyles = normalizeReaderLevelStyles(state.settings.readerLevelStyles);
+        nextStyles[currentTheme] = JSON.parse(JSON.stringify(DEFAULT_READER_LEVEL_STYLES[currentTheme]));
+        await saveSettings({ readerLevelStyles: nextStyles });
+        renderSettingsView();
       });
       $('#saveTranslationsConfigBtn')?.addEventListener('click', async () => {
         const key = ($('#azureTranslateKeyInput')?.value || '').trim();
@@ -5974,7 +6181,9 @@
     }
 
     function applyTheme(theme) {
-      document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+      const resolvedTheme = theme === 'dark' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', resolvedTheme);
+      applyReaderLevelStyleVariables(resolvedTheme);
     }
 
     const APP_VERSION = '2026.04.09.2';
