@@ -2150,7 +2150,7 @@
       return 'word';
     }
 
-    const TOKEN_ANALYSIS_VERSION = 'jp-token-v6';
+    const TOKEN_ANALYSIS_VERSION = 'jp-token-v7';
     const MAX_JAPANESE_SPAN_TOKENS = 8;
     const PARTICLE_SURFACES = new Set(['の','は','が','を','に','へ','と','も']);
     const INFLECTION_CONTINUATION_SET = new Set([
@@ -2571,6 +2571,10 @@
 
     function buildMergedRepairToken(windowTokens, surface, context = {}) {
       const analysis = resolveTokenAnalysisFromDictionary(surface, context);
+      const normalizedSurface = normalizeTokenSurface(surface);
+      const specialBaseForm = /^(?:わからない|分からない|かわからない|か分からない)$/u.test(normalizedSurface)
+        ? 'わかる'
+        : null;
       return {
         surface,
         startOffset: windowTokens[0]?.startOffset ?? 0,
@@ -2582,17 +2586,17 @@
           ? windowTokens[windowTokens.length - 1].rawEndTokenIndex
           : windowTokens.length - 1,
         analysis: {
-          baseForm: analysis?.baseForm || surface,
+          baseForm: specialBaseForm || analysis?.baseForm || surface,
           pos: analysis?.pos || 'word',
           reading: analysis?.reading || null,
-          source: analysis?.analysisSource || 'repair-merge',
+          source: specialBaseForm ? 'repair-merge-wakaranai' : (analysis?.analysisSource || 'repair-merge'),
           score: analysis?.analysisScore || 0
         }
       };
     }
 
     function shouldRepairMergeWindow(windowTokens) {
-      if (!windowTokens.length || windowTokens.length > 3) return false;
+      if (!windowTokens.length || windowTokens.length > 4) return false;
       if (windowTokens.some((tk) => !isJapaneseText(tk.surface || '') || classifyToken(tk.surface || '') !== 'word')) return false;
       const parts = windowTokens.map((tk) => normalizeTokenSurface(tk.surface || ''));
       const surface = parts.join('');
@@ -2603,22 +2607,96 @@
         && isLikelyInflectionContinuation(parts[2])
         && containsKanji(parts[0])
         && /[ぁ-ゖ]+(った|って|て|た|る)$/u.test(surface);
-      if (isLikelyParticleSurface(parts[0])) return false;
+      const allowWakaranaiRepair = (windowTokens.length === 3 && /^(?:わからない|分からない)$/u.test(surface))
+        || (windowTokens.length === 4 && /^(?:か(?:わからない|分からない))$/u.test(surface));
+      if (isLikelyParticleSurface(parts[0]) && !allowWakaranaiRepair) return false;
       if (/^(から|なら|また|でも|そして)/u.test(surface)) return false;
       if (/(から|なら|ので|のに|けど|けれど)$/u.test(surface)) return false;
-      if (parts.some((part) => isLikelyParticleSurface(part)) && !allowSingleInternalKanaRepair) return false;
+      if (parts.some((part) => isLikelyParticleSurface(part)) && !allowSingleInternalKanaRepair && !allowWakaranaiRepair) return false;
       if (containsKanji(surface) && /くな(?:った|って|る|れた|れて|れる)$/u.test(surface)) return false;
       if (/(て|で)(いた|いる|くれる|くれた|くれたら|くれて|おく|おいた)$/u.test(surface)) return true;
       if (windowTokens.length === 2 && parts[0] === 'かもし' && parts[1] === 'れない') return true;
       if (allowSingleInternalKanaRepair) return true;
+      if (allowWakaranaiRepair) return true;
       return false;
+    }
+
+    function getCopulaSplitSuffix(surface) {
+      const normalized = normalizeTokenSurface(surface || '');
+      if (!normalized || normalized.length <= 1) return null;
+      if (/だった$/u.test(normalized)) {
+        const head = normalized.slice(0, -3);
+        if (head) return { head, suffix: 'だった' };
+      }
+      if (/でした$/u.test(normalized)) {
+        const head = normalized.slice(0, -3);
+        if (head) return { head, suffix: 'でした' };
+      }
+      if (/です$/u.test(normalized)) {
+        const head = normalized.slice(0, -2);
+        if (head) return { head, suffix: 'です' };
+      }
+      if (/だ$/u.test(normalized)) {
+        const head = normalized.slice(0, -1);
+        if (!head) return null;
+        if (/[\p{Script=Han}]$/u.test(head)) return { head, suffix: 'だ' };
+        if (isKanaOnly(head) && [...head].length >= 3 && !/[んいしちにびみり]$/u.test(head)) return { head, suffix: 'だ' };
+      }
+      return null;
+    }
+
+    function shouldSplitMergedCopulaToken(token, context = {}) {
+      if (!token?.surface || classifyToken(token.surface || '') !== 'word' || !isJapaneseText(token.surface || '')) return null;
+      const split = getCopulaSplitSuffix(token.surface);
+      if (!split) return null;
+      const normalizedSurface = normalizeTokenSurface(token.surface || '');
+      const analysis = resolveTokenAnalysisFromDictionary(normalizedSurface, context);
+      if (analysis?.analysisSource === 'exact-dict' || analysis?.analysisSource === 'deinflected-dict') return null;
+      return split;
+    }
+
+    function buildSplitTokenFromSource(sourceToken, pieceSurface, startOffset, endOffset, analysis) {
+      return {
+        ...sourceToken,
+        surface: pieceSurface,
+        startOffset,
+        endOffset,
+        analysis: {
+          ...(sourceToken.analysis || {}),
+          ...analysis
+        }
+      };
+    }
+
+    function splitMergedCopulaToken(token, context = {}) {
+      const split = shouldSplitMergedCopulaToken(token, context);
+      if (!split) return null;
+      const headLength = [...split.head].length;
+      const startOffset = token.startOffset ?? 0;
+      const midOffset = startOffset + headLength;
+      const endOffset = token.endOffset ?? midOffset + [...split.suffix].length;
+      const headAnalysis = resolveTokenAnalysisFromDictionary(split.head, context);
+      return [
+        buildSplitTokenFromSource(token, split.head, startOffset, midOffset, {
+          baseForm: headAnalysis?.baseForm || split.head,
+          pos: headAnalysis?.pos || 'word',
+          reading: headAnalysis?.reading || null,
+          source: 'post-split-copula'
+        }),
+        buildSplitTokenFromSource(token, split.suffix, midOffset, endOffset, {
+          baseForm: 'だ',
+          pos: 'auxiliary',
+          reading: null,
+          source: 'post-split-copula'
+        })
+      ];
     }
 
     function repairMergedJapaneseTokens(tokens, context = {}) {
       const out = [];
       for (let i = 0; i < tokens.length; i++) {
         let mergedRepair = null;
-        for (let span = Math.min(3, tokens.length - i); span >= 2; span--) {
+        for (let span = Math.min(4, tokens.length - i); span >= 2; span--) {
           const window = tokens.slice(i, i + span);
           if (!shouldRepairMergeWindow(window)) continue;
           const surface = window.map((tk) => tk.surface || '').join('');
@@ -2651,6 +2729,11 @@
             i += 1;
             continue;
           }
+        }
+        const copulaSplit = splitMergedCopulaToken(current, context);
+        if (copulaSplit) {
+          out.push(...copulaSplit);
+          continue;
         }
         out.push(current);
       }
@@ -2810,6 +2893,21 @@
           input: '彼が庇ってくれた。',
           expectedContains: ['庇ってくれた'],
           expectedBaseForms: { '庇ってくれた': '庇う' }
+        },
+        {
+          name: 'Copula should split from adverbial noun phrases',
+          input: 'こころが起きる頃にはもういないことがほとんどだ。',
+          expectedContains: ['ほとんど','だ']
+        },
+        {
+          name: 'Past copula should split after time nouns',
+          input: '気がつくと、三時だった。',
+          expectedContains: ['三時','だった']
+        },
+        {
+          name: 'Wakaranai chain should stay merged',
+          input: 'どうしてこんなに眠いのかわからないけど、学校にいる時よりも、家にいると眠気に襲われることが多い。',
+          expectedContains: ['かわからない']
         }
       ];
 
