@@ -714,9 +714,71 @@
       gap: 4px;
       width: 100%;
     }
+    .sentence-copy-content {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+    }
     .sentence-copy-text {
       flex: 1;
       min-width: 0;
+      width: 100%;
+    }
+    .sentence-edit-link {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 0;
+      font-size: 0.76rem;
+      line-height: 1.1;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      min-width: auto;
+    }
+    .sentence-edit-link:hover {
+      color: var(--text);
+      background: transparent;
+    }
+    .sentence-edit-link.has-manual-override {
+      color: color-mix(in srgb, var(--muted) 70%, var(--primary) 30%);
+    }
+    .sentence-edit-panel {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--surface) 92%, var(--surface-soft) 8%);
+      display: grid;
+      gap: 8px;
+    }
+    .sentence-edit-panel textarea {
+      min-height: 96px;
+      margin: 0;
+    }
+    .sentence-edit-help {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.35;
+    }
+    .sentence-edit-error {
+      margin: 0;
+      color: var(--danger);
+      font-size: 0.82rem;
+      line-height: 1.35;
+    }
+    .sentence-edit-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .sentence-edit-actions button {
+      min-width: auto;
     }
     .token-panel-headword {
       display: inline-flex;
@@ -1240,7 +1302,7 @@
     // Config / constantes
     // =========================
     const DB_NAME = 'jp_epub_reader_db';
-    const DB_VERSION = 4;
+    const DB_VERSION = 5;
     const STORES = {
       books: 'books',
       bookFiles: 'bookFiles',
@@ -1250,7 +1312,8 @@
       dictionaryCache: 'dictionaryCache',
       dictionaryEntries: 'dictionaryEntries',
       dictionaryPacks: 'dictionaryPacks',
-      dictionaryMeta: 'dictionaryMeta'
+      dictionaryMeta: 'dictionaryMeta',
+      sentenceOverrides: 'sentenceOverrides'
     };
     const SETTINGS_KEY = 'app_settings';
     const AZURE_TRANSLATOR_ENDPOINT = 'https://api.cognitive.microsofttranslator.com';
@@ -1338,6 +1401,15 @@
         sentenceIndex: null,
         status: 'idle',
         translatedText: '',
+        error: ''
+      },
+      sentenceOverrideMap: new Map(),
+      sentenceEditor: {
+        isOpen: false,
+        bookId: null,
+        sectionIndex: null,
+        sentenceIndex: null,
+        draft: '',
         error: ''
       }
     };
@@ -1441,6 +1513,14 @@
           if (!db.objectStoreNames.contains(STORES.dictionaryMeta)) {
             db.createObjectStore(STORES.dictionaryMeta, { keyPath: 'id' });
           }
+          if (!db.objectStoreNames.contains(STORES.sentenceOverrides)) {
+            const sentenceOverridesStore = db.createObjectStore(STORES.sentenceOverrides, { keyPath: 'id' });
+            sentenceOverridesStore.createIndex('bookId', 'bookId', { unique: false });
+            sentenceOverridesStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          const sentenceOverridesStore = req.transaction.objectStore(STORES.sentenceOverrides);
+          if (!sentenceOverridesStore.indexNames.contains('bookId')) sentenceOverridesStore.createIndex('bookId', 'bookId', { unique: false });
+          if (!sentenceOverridesStore.indexNames.contains('updatedAt')) sentenceOverridesStore.createIndex('updatedAt', 'updatedAt', { unique: false });
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -1550,6 +1630,10 @@
       await dbDelete(STORES.books, bookId);
       await dbDelete(STORES.bookFiles, bookId);
       await dbDelete(STORES.progress, bookId);
+      await dbDeleteWhereIndexEquals(STORES.sentenceOverrides, 'bookId', bookId);
+      for (const [id, record] of [...state.sentenceOverrideMap.entries()]) {
+        if (record?.bookId === bookId) state.sentenceOverrideMap.delete(id);
+      }
     }
 
     async function saveReadingProgress(bookId, payload) {
@@ -1570,6 +1654,183 @@
       state.settings = { ...state.settings, ...next };
       await dbPut(STORES.settings, { id: SETTINGS_KEY, value: state.settings });
       applyTheme(state.settings.theme);
+    }
+
+
+    function resetSentenceEditorState() {
+      state.sentenceEditor = {
+        isOpen: false,
+        bookId: null,
+        sectionIndex: null,
+        sentenceIndex: null,
+        draft: '',
+        error: ''
+      };
+    }
+
+    function buildSentenceOverrideId(bookId, sectionPath, sentenceIndex) {
+      return `${bookId || 'book'}::${sectionPath || 'section'}::${sentenceIndex}`;
+    }
+
+    function normalizeSentenceOverrideText(text) {
+      return String(text || '')
+        .replace(/\s+/gu, ' ')
+        .trim();
+    }
+
+    function removeSentenceOverrideWhitespace(text) {
+      return String(text || '').replace(/\s+/gu, '');
+    }
+
+    async function loadSentenceOverrides() {
+      const rows = await dbGetAll(STORES.sentenceOverrides);
+      state.sentenceOverrideMap = new Map((rows || []).filter((row) => row?.id).map((row) => [row.id, row]));
+      return state.sentenceOverrideMap;
+    }
+
+    function getSentenceOverrideRecord(bookId, sectionIndex, sentenceIndex, sentence = null) {
+      const section = state.sections[sectionIndex] || {};
+      const id = buildSentenceOverrideId(bookId, section.path, sentenceIndex);
+      const record = state.sentenceOverrideMap.get(id) || null;
+      if (!record) return null;
+      if (sentence != null) {
+        const expected = removeSentenceOverrideWhitespace(sentence);
+        const original = removeSentenceOverrideWhitespace(record.originalSentence || '');
+        if (expected && original && expected !== original) return null;
+      }
+      return record;
+    }
+
+    function buildAutomaticSentenceTokenization(bookId, sectionIndex, sentenceIndex, sentence) {
+      const raw = tokenizeJapaneseText(sentence);
+      const mergedRaw = mergeJapaneseTokensForDisplayAndLookup(raw, {
+        bookId,
+        sectionIndex,
+        sentenceIndex,
+        analysisMemo: new Map()
+      });
+      const tokens = mergedRaw.map((tk, tokenIndex) => buildTokenModel(tk, {
+        bookId,
+        sectionIndex,
+        sentenceIndex,
+        tokenIndex
+      }));
+      return { sentence, tokens, tokenizationMode: 'auto' };
+    }
+
+    function buildManualSentenceTokens(sentence, segmentedText, context = {}) {
+      const compactSentence = removeSentenceOverrideWhitespace(sentence);
+      const normalizedSegmentedText = normalizeSentenceOverrideText(segmentedText);
+      if (!compactSentence || !normalizedSegmentedText) return [];
+      const pieces = normalizedSegmentedText.split(/\s+/u).filter(Boolean);
+      if (!pieces.length) return [];
+      if (pieces.join('') !== compactSentence) return [];
+      const analysisMemo = new Map();
+      let cursor = 0;
+      return pieces.map((piece, tokenIndex) => {
+        const startOffset = cursor;
+        const endOffset = startOffset + piece.length;
+        cursor = endOffset;
+        const tokenType = classifyToken(piece);
+        const analysis = isJapaneseText(piece) && tokenType !== 'punct' && tokenType !== 'space' && tokenType !== 'empty'
+          ? resolveTokenAnalysisFromDictionary(piece, { ...context, analysisMemo })
+          : null;
+        return buildTokenModel({
+          surface: piece,
+          startOffset,
+          endOffset,
+          rawSpanLength: 1,
+          rawStartTokenIndex: tokenIndex,
+          rawEndTokenIndex: tokenIndex,
+          analysis: {
+            baseForm: analysis?.baseForm || normalizeTokenSurface(piece) || piece,
+            pos: analysis?.pos || tokenType,
+            reading: analysis?.reading || null,
+            source: 'manual-override',
+            score: Number(analysis?.analysisScore) || 0
+          }
+        }, {
+          bookId: context.bookId,
+          sectionIndex: context.sectionIndex,
+          sentenceIndex: context.sentenceIndex,
+          tokenIndex
+        });
+      });
+    }
+
+    function buildDefaultSentenceEditorDraft(bookId, sectionIndex, sentenceIndex) {
+      const section = state.sections[sectionIndex] || {};
+      const sentences = getSentencesForSection(section);
+      const sentence = sentences[sentenceIndex] || '';
+      if (!sentence) return '';
+      const existingOverride = getSentenceOverrideRecord(bookId, sectionIndex, sentenceIndex, sentence);
+      if (existingOverride?.segmentedText) return existingOverride.segmentedText;
+      const tokenized = buildAutomaticSentenceTokenization(bookId, sectionIndex, sentenceIndex, sentence);
+      return tokenized.tokens.map((token) => token.surface || '').join(' ').trim() || sentence;
+    }
+
+    function openSentenceEditorForLocation(location) {
+      const safeLocation = getNormalizedReaderLocation(location);
+      state.sentenceEditor = {
+        isOpen: true,
+        bookId: state.currentBookId,
+        sectionIndex: safeLocation.sectionIndex,
+        sentenceIndex: safeLocation.sentenceIndex,
+        draft: buildDefaultSentenceEditorDraft(state.currentBookId, safeLocation.sectionIndex, safeLocation.sentenceIndex),
+        error: ''
+      };
+    }
+
+    function isSentenceEditorOpen(location) {
+      const safeLocation = getNormalizedReaderLocation(location);
+      return Boolean(
+        state.sentenceEditor.isOpen
+        && state.sentenceEditor.bookId === state.currentBookId
+        && Number(state.sentenceEditor.sectionIndex) === Number(safeLocation.sectionIndex)
+        && Number(state.sentenceEditor.sentenceIndex) === Number(safeLocation.sentenceIndex)
+      );
+    }
+
+    async function saveSentenceOverrideForLocation(location, segmentedText) {
+      const safeLocation = getNormalizedReaderLocation(location);
+      const section = state.sections[safeLocation.sectionIndex] || {};
+      const sentences = getSentencesForSection(section);
+      const sentence = sentences[safeLocation.sentenceIndex] || '';
+      const normalizedSegmentedText = normalizeSentenceOverrideText(segmentedText);
+      const compactSentence = removeSentenceOverrideWhitespace(sentence);
+      const compactSegmented = removeSentenceOverrideWhitespace(normalizedSegmentedText);
+      if (!sentence) throw new Error('No se encontró la frase actual.');
+      if (!normalizedSegmentedText) throw new Error('Añade al menos una división antes de guardar.');
+      if (compactSegmented !== compactSentence) {
+        throw new Error('La frase editada debe contener exactamente los mismos caracteres; solo puedes cambiar los espacios.');
+      }
+      const id = buildSentenceOverrideId(state.currentBookId, section.path, safeLocation.sentenceIndex);
+      const now = new Date().toISOString();
+      const existing = state.sentenceOverrideMap.get(id);
+      const record = {
+        id,
+        bookId: state.currentBookId,
+        sectionPath: section.path,
+        sectionIndex: safeLocation.sectionIndex,
+        sentenceIndex: safeLocation.sentenceIndex,
+        originalSentence: sentence,
+        segmentedText: normalizedSegmentedText,
+        createdAt: existing?.createdAt || now,
+        updatedAt: now
+      };
+      await dbPut(STORES.sentenceOverrides, record);
+      state.sentenceOverrideMap.set(id, record);
+      state.sentenceTokenCache.clear();
+      return record;
+    }
+
+    async function deleteSentenceOverrideForLocation(location) {
+      const safeLocation = getNormalizedReaderLocation(location);
+      const section = state.sections[safeLocation.sectionIndex] || {};
+      const id = buildSentenceOverrideId(state.currentBookId, section.path, safeLocation.sentenceIndex);
+      await dbDelete(STORES.sentenceOverrides, id);
+      state.sentenceOverrideMap.delete(id);
+      state.sentenceTokenCache.clear();
     }
 
     async function blobToDataUrl(blob) {
@@ -1751,6 +2012,8 @@
       await loadDictionaryIndexes();
       await refreshBooks();
       await loadVocabularyMap();
+      await loadSentenceOverrides();
+      resetSentenceEditorState();
       return {
         fileName: file.name,
         exportedAt: parsed.exportedAt || null,
@@ -2829,24 +3092,30 @@
       if (!section) return { sentence: '', tokens: [] };
       const sentences = getSentencesForSection(section);
       const sentence = sentences[sentenceIndex] || '';
-      const cacheKey = `${TOKEN_ANALYSIS_VERSION}::${bookId || 'book'}::${section.path}::${sentenceIndex}::${sentence}`;
+      const overrideRecord = getSentenceOverrideRecord(bookId, sectionIndex, sentenceIndex, sentence);
+      const overrideSignature = overrideRecord ? `manual::${overrideRecord.updatedAt || ''}::${overrideRecord.segmentedText || ''}` : 'auto';
+      const cacheKey = `${TOKEN_ANALYSIS_VERSION}::${bookId || 'book'}::${section.path}::${sentenceIndex}::${sentence}::${overrideSignature}`;
       const cached = state.sentenceTokenCache.get(cacheKey);
       if (cached) return cached;
 
-      const raw = tokenizeJapaneseText(sentence);
-      const mergedRaw = mergeJapaneseTokensForDisplayAndLookup(raw, {
-        bookId,
-        sectionIndex,
-        sentenceIndex,
-        analysisMemo: new Map()
-      });
-      const tokens = mergedRaw.map((tk, tokenIndex) => buildTokenModel(tk, {
-        bookId,
-        sectionIndex,
-        sentenceIndex,
-        tokenIndex
-      }));
-      return cacheTokenizationResult(cacheKey, { sentence, tokens });
+      if (overrideRecord?.segmentedText) {
+        const manualTokens = buildManualSentenceTokens(sentence, overrideRecord.segmentedText, {
+          bookId,
+          sectionIndex,
+          sentenceIndex
+        });
+        if (manualTokens.length) {
+          return cacheTokenizationResult(cacheKey, {
+            sentence,
+            tokens: manualTokens,
+            tokenizationMode: 'manual',
+            overrideId: overrideRecord.id,
+            segmentedText: overrideRecord.segmentedText
+          });
+        }
+      }
+
+      return cacheTokenizationResult(cacheKey, buildAutomaticSentenceTokenization(bookId, sectionIndex, sentenceIndex, sentence));
     }
 
     function getTokenizedSection(bookId, sectionIndex) {
@@ -3391,10 +3660,7 @@
       const displaySurface = entry.surface || token.surface || '—';
       const lemmaText = entry.lemma || dictionaryResult?.lemma || token.baseForm || null;
       const readingText = entry.readingKana || dictionaryResult?.readingKana || null;
-      const dictionarySummaryText = dictionaryDefinition && dictionaryDefinition !== '—'
-        ? ` - ${dictionaryDefinition}`
-        : '';
-      const showLemmaLine = Boolean(lemmaText || readingText || dictionarySummaryText);
+      const showLemmaLine = Boolean(lemmaText || readingText);
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
@@ -3413,10 +3679,15 @@
                 <h3>${escapeHtml(displaySurface)}</h3>
                 <button id="copyTokenSurfaceBtn" class="copy-glyph-btn" title="Copiar palabra" aria-label="Copiar palabra">⧉</button>
               </div>
-              ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || displaySurface || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span>${escapeHtml(dictionarySummaryText)}</div>` : ''}
+              ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span></div>` : ''}
             </div>
           </div>
           <div class="token-grid">
+            <div class="token-panel-section">
+              <div class="token-panel-section-content">
+                <span class="v token-panel-definition">${escapeHtml(dictionaryDefinition)}</span>
+              </div>
+            </div>
             <div class="token-panel-section">
               <div class="token-panel-section-content">
                 <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
@@ -4186,6 +4457,7 @@
       state.flatSentenceEntriesCache = null;
       state.flatSentenceIndexLookupCache = null;
       resetSentenceTranslation();
+      resetSentenceEditorState();
 
       await dbPut(STORES.books, { ...book, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       await saveSettings({ lastOpenedBookId: bookId });
@@ -5049,6 +5321,24 @@
       const copySentenceAttrs = options.preview
         ? 'class="copy-glyph-btn" title="Copiar frase" aria-hidden="true" tabindex="-1"'
         : 'id="copySentenceBtn" class="copy-glyph-btn" title="Copiar frase" aria-label="Copiar frase"';
+      const manualOverrideRecord = options.preview ? null : getSentenceOverrideRecord(state.currentBookId, safeLocation.sectionIndex, idx, sentence);
+      const editorOpen = !options.preview && isSentenceEditorOpen({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx });
+      const editorHtml = options.preview ? '' : `
+        <button id="openSentenceEditorBtn" class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-label="Editar divisiones de la frase">[EDIT]</button>
+        ${editorOpen ? `
+          <div class="sentence-edit-panel">
+            <textarea id="sentenceEditInput" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off">${escapeHtml(state.sentenceEditor.draft || '')}</textarea>
+            <p class="sentence-edit-help">Edita la frase usando espacios para separar o juntar bloques. Solo se permiten cambios de espacios, no de caracteres.</p>
+            ${state.sentenceEditor.error ? `<p class="sentence-edit-error">${escapeHtml(state.sentenceEditor.error)}</p>` : ''}
+            <div class="sentence-edit-actions">
+              <button id="saveSentenceEditBtn" class="primary" type="button">Guardar</button>
+              <button id="resetSentenceEditBtn" type="button">Auto</button>
+              ${manualOverrideRecord ? '<button id="clearSentenceEditBtn" type="button">Quitar override</button>' : ''}
+              <button id="cancelSentenceEditBtn" type="button">Cancelar</button>
+            </div>
+          </div>
+        ` : ''}
+      `;
       return `
         <div class="${wrapperClass}" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">
           <div class="sentence-hero${options.preview ? ' sentence-hero-preview' : ''}"${options.preview ? ' aria-hidden="true"' : ''}>
@@ -5057,10 +5347,13 @@
           <div class="sentence-box">
             <span class="sentence-copy-wrap">
               <button ${copySentenceAttrs}>⧉</button>
-              <span class="sentence-copy-text">${sentenceHtml}</span>
+              <span class="sentence-copy-content">
+                <span class="sentence-copy-text">${sentenceHtml}</span>
+                ${editorHtml}
+              </span>
             </span>
           </div>
-          ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
+          ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${tokenized.tokenizationMode === 'manual' ? 'Override manual activo.' : ''} ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
           <button ${translateButtonAttrs}>Traducir oración</button>
           ${translationHtml}
         </div>
@@ -5325,7 +5618,78 @@
           const copied = await copyTextToClipboard(currentSentence.replace(/\s+/gu, ''));
           if (copied) showCopyFeedback($('#copySentenceBtn'));
         });
+        $('#openSentenceEditorBtn')?.addEventListener('click', () => {
+          const keepMenuOpen = !$('#readerMenu')?.classList.contains('hidden');
+          if (isSentenceEditorOpen({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex })) {
+            resetSentenceEditorState();
+          } else {
+            openSentenceEditorForLocation({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex });
+          }
+          renderReaderView({ keepMenuOpen });
+        });
+        $('#cancelSentenceEditBtn')?.addEventListener('click', () => {
+          const keepMenuOpen = !$('#readerMenu')?.classList.contains('hidden');
+          resetSentenceEditorState();
+          renderReaderView({ keepMenuOpen });
+        });
+        $('#resetSentenceEditBtn')?.addEventListener('click', () => {
+          const textarea = $('#sentenceEditInput');
+          const nextDraft = buildAutomaticSentenceTokenization(
+            state.currentBookId,
+            state.currentSpineIndex,
+            state.currentSentenceIndex,
+            getSentencesForSection(state.sections[state.currentSpineIndex] || {})[state.currentSentenceIndex] || ''
+          ).tokens.map((token) => token.surface || '').join(' ').trim();
+          state.sentenceEditor.draft = nextDraft;
+          state.sentenceEditor.error = '';
+          if (textarea) {
+            textarea.value = nextDraft;
+            textarea.focus();
+            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+          }
+        });
+        $('#clearSentenceEditBtn')?.addEventListener('click', async () => {
+          const keepMenuOpen = !$('#readerMenu')?.classList.contains('hidden');
+          await deleteSentenceOverrideForLocation({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex });
+          resetSentenceEditorState();
+          renderReaderView({ keepMenuOpen });
+          await persistCurrentProgress();
+        });
+        $('#saveSentenceEditBtn')?.addEventListener('click', async () => {
+          const keepMenuOpen = !$('#readerMenu')?.classList.contains('hidden');
+          const draft = $('#sentenceEditInput')?.value || '';
+          state.sentenceEditor.draft = draft;
+          state.sentenceEditor.error = '';
+          try {
+            await saveSentenceOverrideForLocation({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex }, draft);
+            resetSentenceEditorState();
+            renderReaderView({ keepMenuOpen });
+            await persistCurrentProgress();
+          } catch (err) {
+            state.sentenceEditor.error = err?.message || 'No se pudo guardar la edición manual.';
+            renderReaderView({ keepMenuOpen });
+          }
+        });
+        $('#sentenceEditInput')?.addEventListener('input', (e) => {
+          state.sentenceEditor.draft = e.target.value || '';
+          state.sentenceEditor.error = '';
+        });
+        $('#sentenceEditInput')?.addEventListener('keydown', async (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            $('#saveSentenceEditBtn')?.click();
+          }
+        });
+        if (isSentenceEditorOpen({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex })) {
+          requestAnimationFrame(() => {
+            const sentenceEditInput = $('#sentenceEditInput');
+            if (!sentenceEditInput) return;
+            sentenceEditInput.focus();
+            sentenceEditInput.setSelectionRange(sentenceEditInput.value.length, sentenceEditInput.value.length);
+          });
+        }
         $('#currentReaderPanel .sentence-box')?.addEventListener('click', async (e) => {
+          if (e.target.closest('#openSentenceEditorBtn, #saveSentenceEditBtn, #resetSentenceEditBtn, #clearSentenceEditBtn, #cancelSentenceEditBtn, #sentenceEditInput')) return;
           const tokenEl = e.target.closest('.token[data-interactive="1"]');
           if (!tokenEl) return;
           const token = getTokenFromElement(tokenEl);
@@ -5728,6 +6092,8 @@
       await loadDictionaryIndexes();
       await refreshBooks();
       await loadVocabularyMap();
+      await loadSentenceOverrides();
+      resetSentenceEditorState();
       renderLibraryView();
       if (state.settings.lastOpenedBookId && state.books.some((b) => b.id === state.settings.lastOpenedBookId)) {
         // Punto de extensión futuro: restaurar auto-apertura configurable.
