@@ -562,9 +562,20 @@
       flex-wrap: wrap;
       justify-content: center;
     }
+    .sentence-external-links-row {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      justify-content: flex-start;
+    }
     [data-theme="dark"] .external-links-row {
       background: color-mix(in srgb, var(--surface-soft) 80%, #8b96ab 20%);
       border-color: color-mix(in srgb, var(--border) 78%, #9ca3af 22%);
+    }
+    [data-theme="dark"] .sentence-external-links-row {
+      background: transparent;
+      border-color: transparent;
     }
     .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
     .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
@@ -5417,11 +5428,11 @@
           </div>
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${tokenized.tokenizationMode === 'manual' ? 'Override manual activo.' : ''} ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
           <button ${translateButtonAttrs}>Traducir oración</button>
-          <div class="external-links-row">
+          ${translationHtml}
+          <div class="external-links-row sentence-external-links-row">
             <button ${sentenceChatgptAttrs}>ChatGPT</button>
             <button ${sentenceGoogleTranslateAttrs}>Google Translate</button>
           </div>
-          ${translationHtml}
         </div>
       `;
     }
