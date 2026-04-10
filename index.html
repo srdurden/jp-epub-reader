@@ -1534,6 +1534,9 @@
         isBusy: false,
         status: ''
       },
+      advancedSettingsUi: {
+        isOpen: false
+      },
       translationConfigStatus: '',
       geminiConfigStatus: '',
       sentenceTranslation: {
@@ -5020,20 +5023,6 @@
             </h1>
             <div class="library-toolbar">
               <div class="reader-menu-section">
-                <h2 style="margin:0;">Lector (${currentTheme === 'dark' ? 'Oscuro' : 'Claro'})</h2>
-                <label for="settingsFontSizeInput"><strong>Tamaño de letra</strong></label>
-                <input id="settingsFontSizeInput" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
-                <div class="field-help">Tamaño actual: <span id="settingsFontSizeValue">${state.settings.fontSize}px</span></div>
-                <div class="reader-level-settings">
-                  ${readerLevelRowsHtml}
-                </div>
-                <div>
-                  <strong>Vista previa</strong>
-                  <div class="reader-level-preview">${readerPreviewTokensHtml}</div>
-                </div>
-                <button id="resetReaderStylesBtn" class="library-action-btn" type="button">Restablecer estilos del tema actual</button>
-              </div>
-              <div class="reader-menu-section">
                 <h2 style="margin:0;">Traducciones</h2>
                 <label for="azureTranslateKeyInput"><strong>Clave de Azure Translator</strong></label>
                 <input id="azureTranslateKeyInput" type="password" value="${escapeHtml(keyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
@@ -5078,6 +5067,7 @@
               <div class="reader-menu-section">
                 <h2 style="margin:0;">Acciones</h2>
                 <div class="library-actions-row">
+                  <button id="openAdvancedSettingsBtn" class="library-action-btn" type="button">Avanzada</button>
                   <button id="openBackupFromSettingsBtn" class="library-action-btn" type="button">Exportar / importar</button>
                   <button id="importDictPackFromSettingsBtn" class="library-action-btn" type="button" title="Importar dictionary pack local">Importar diccionario</button>
                   <button id="refreshStaticCacheFromSettingsBtn" class="library-action-btn" type="button" title="Actualizar shell offline y recargar">Refrescar</button>
@@ -5089,13 +5079,49 @@
             </div>
             <p class="status library-status">${escapeHtml(state.geminiConfigStatus || (isGeminiConfigured ? 'Configuración de Gemini lista.' : 'Añade tu clave API y revisa el modelo y el prompt por defecto.'))}</p>
           </div>
+          ${state.advancedSettingsUi.isOpen ? `
+            <div class="library-modal-backdrop" data-close-advanced-modal="1" aria-hidden="true"></div>
+            <aside class="library-modal" role="dialog" aria-modal="true" aria-labelledby="advancedSettingsTitle">
+              <div class="library-modal-header">
+                <h2 id="advancedSettingsTitle" class="library-modal-title">Configuración avanzada</h2>
+                <button id="closeAdvancedSettingsBtn" class="icon-btn" type="button" aria-label="Cerrar popup">✕</button>
+              </div>
+              <div class="library-modal-body">
+                <div class="reader-menu-section">
+                  <h2 style="margin:0;">Lector (${currentTheme === 'dark' ? 'Oscuro' : 'Claro'})</h2>
+                  <label for="settingsFontSizeInput"><strong>Tamaño de letra</strong></label>
+                  <input id="settingsFontSizeInput" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
+                  <div class="field-help">Tamaño actual: <span id="settingsFontSizeValue">${state.settings.fontSize}px</span></div>
+                  <div class="reader-level-settings">
+                    ${readerLevelRowsHtml}
+                  </div>
+                  <div>
+                    <strong>Vista previa</strong>
+                    <div class="reader-level-preview">${readerPreviewTokensHtml}</div>
+                  </div>
+                  <button id="resetReaderStylesBtn" class="library-action-btn" type="button">Restablecer estilos del tema actual</button>
+                </div>
+              </div>
+            </aside>
+          ` : ''}
         </div>`;
 
       $('#backLibraryFromSettingsBtn')?.addEventListener('click', () => {
         state.translationConfigStatus = '';
         state.geminiConfigStatus = '';
+        state.advancedSettingsUi.isOpen = false;
         renderLibraryView();
       });
+      $('#openAdvancedSettingsBtn')?.addEventListener('click', () => {
+        state.advancedSettingsUi.isOpen = true;
+        renderSettingsView();
+      });
+      const closeAdvancedSettingsModal = () => {
+        state.advancedSettingsUi.isOpen = false;
+        renderSettingsView();
+      };
+      $('#closeAdvancedSettingsBtn')?.addEventListener('click', closeAdvancedSettingsModal);
+      app.querySelector('[data-close-advanced-modal="1"]')?.addEventListener('click', closeAdvancedSettingsModal);
       $('#settingsFontSizeInput')?.addEventListener('input', async (e) => {
         const nextSize = Math.max(14, Math.min(30, Number(e.target.value) || 18));
         $('#settingsFontSizeValue').textContent = `${nextSize}px`;
