@@ -2262,12 +2262,14 @@
     const RAW_INTERNAL_BREAK_SUFFIXES = ['たら'];
 
     function shouldSplitLeadingParticle(surface, prevSurface) {
-      const chars = [...normalizeTokenSurface(surface || '')];
+      const normalizedSurface = normalizeTokenSurface(surface || '');
+      const chars = [...normalizedSurface];
       const first = chars[0] || '';
       const rest = chars.slice(1).join('');
       if (!first || !rest) return false;
       if (!PARTICLE_SURFACES.has(first)) return false;
       if (!prevSurface || !isJapaneseText(prevSurface)) return false;
+      if (normalizedSurface === 'もう') return false;
       return /^[ぁ-ゖァ-ヺ\p{Script=Han}]/u.test(rest);
     }
 
@@ -2574,7 +2576,9 @@
       const normalizedSurface = normalizeTokenSurface(surface);
       const specialBaseForm = /^(?:わからない|分からない|かわからない|か分からない)$/u.test(normalizedSurface)
         ? 'わかる'
-        : null;
+        : /^(?:よかった)$/u.test(normalizedSurface)
+          ? 'よい'
+          : null;
       return {
         surface,
         startOffset: windowTokens[0]?.startOffset ?? 0,
@@ -2589,7 +2593,11 @@
           baseForm: specialBaseForm || analysis?.baseForm || surface,
           pos: analysis?.pos || 'word',
           reading: analysis?.reading || null,
-          source: specialBaseForm ? 'repair-merge-wakaranai' : (analysis?.analysisSource || 'repair-merge'),
+          source: normalizedSurface === 'よかった'
+            ? 'repair-merge-yokatta'
+            : specialBaseForm
+              ? 'repair-merge-wakaranai'
+              : (analysis?.analysisSource || 'repair-merge'),
           score: analysis?.analysisScore || 0
         }
       };
@@ -2609,6 +2617,9 @@
         && /[ぁ-ゖ]+(った|って|て|た|る)$/u.test(surface);
       const allowWakaranaiRepair = (windowTokens.length === 3 && /^(?:わからない|分からない)$/u.test(surface))
         || (windowTokens.length === 4 && /^(?:か(?:わからない|分からない))$/u.test(surface));
+      const allowYokattaRepair = windowTokens.length >= 2
+        && windowTokens.length <= 4
+        && /^(?:よかった)$/u.test(surface);
       if (isLikelyParticleSurface(parts[0]) && !allowWakaranaiRepair) return false;
       if (/^(から|なら|また|でも|そして)/u.test(surface)) return false;
       if (/(から|なら|ので|のに|けど|けれど)$/u.test(surface)) return false;
@@ -2618,6 +2629,7 @@
       if (windowTokens.length === 2 && parts[0] === 'かもし' && parts[1] === 'れない') return true;
       if (allowSingleInternalKanaRepair) return true;
       if (allowWakaranaiRepair) return true;
+      if (allowYokattaRepair) return true;
       return false;
     }
 
@@ -2908,6 +2920,16 @@
           name: 'Wakaranai chain should stay merged',
           input: 'どうしてこんなに眠いのかわからないけど、学校にいる時よりも、家にいると眠気に襲われることが多い。',
           expectedContains: ['かわからない']
+        },
+        {
+          name: 'Mou should stay intact',
+          input: 'こころが起きる頃にはもういないことがほとんどだ。',
+          expectedContains: ['もう']
+        },
+        {
+          name: 'Yokatta should stay merged',
+          input: '隠せばよかった。',
+          expectedContains: ['よかった']
         }
       ];
 
