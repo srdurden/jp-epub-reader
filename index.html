@@ -3391,7 +3391,10 @@
       const displaySurface = entry.surface || token.surface || '—';
       const lemmaText = entry.lemma || dictionaryResult?.lemma || token.baseForm || null;
       const readingText = entry.readingKana || dictionaryResult?.readingKana || null;
-      const showLemmaLine = Boolean(lemmaText || readingText);
+      const dictionarySummaryText = dictionaryDefinition && dictionaryDefinition !== '—'
+        ? ` - ${dictionaryDefinition}`
+        : '';
+      const showLemmaLine = Boolean(lemmaText || readingText || dictionarySummaryText);
       host.innerHTML = `
         <div class="token-panel-backdrop" data-close-token-panel="1" aria-hidden="true"></div>
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
@@ -3410,15 +3413,10 @@
                 <h3>${escapeHtml(displaySurface)}</h3>
                 <button id="copyTokenSurfaceBtn" class="copy-glyph-btn" title="Copiar palabra" aria-label="Copiar palabra">⧉</button>
               </div>
-              ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span></div>` : ''}
+              ${showLemmaLine ? `<div class="token-lemma-line">${escapeHtml(lemmaText || displaySurface || '—')} <span class="hiragana">(${escapeHtml(readingText || '—')})</span>${escapeHtml(dictionarySummaryText)}</div>` : ''}
             </div>
           </div>
           <div class="token-grid">
-            <div class="token-panel-section">
-              <div class="token-panel-section-content">
-                <span class="v token-panel-definition">${escapeHtml(dictionaryDefinition)}</span>
-              </div>
-            </div>
             <div class="token-panel-section">
               <div class="token-panel-section-content">
                 <div style="${hasUserDefinition && !isEditingUserDefinition ? 'display:none;' : ''}">
