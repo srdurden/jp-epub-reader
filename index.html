@@ -121,12 +121,19 @@
       display: block;
       pointer-events: none;
     }
-    .reader-topbar-icon line,
-    .reader-topbar-icon circle {
+    .reader-topbar-icon line {
       stroke: currentColor;
-      fill: currentColor;
+      fill: none;
       stroke-linecap: round;
-      stroke-width: 2.6;
+      stroke-width: 2.35;
+    }
+    .reader-topbar-btn.menu .reader-topbar-icon {
+      width: 30px;
+      height: 14px;
+    }
+    .reader-topbar-btn.menu .reader-topbar-icon circle {
+      fill: currentColor;
+      stroke: none;
     }
     .reader-quick-nav {
       display: grid;
@@ -653,6 +660,7 @@
       justify-content: center;
     }
     .sentence-external-links-row {
+      margin-top: 6px;
       padding: 0;
       border: 0;
       border-radius: 0;
@@ -766,12 +774,19 @@
     .sentence-hero {
       display: grid;
       place-items: center;
-      padding: 2px 0 0;
-      margin-bottom: 0;
+      padding: 0;
+      margin-bottom: -8px;
     }
     .sentence-box {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    .sentence-copy-content {
+      gap: 2px;
+    }
+    .sentence-edit-link {
+      display: inline-block;
       margin-top: -2px;
-      margin-bottom: 6px;
     }
     .sentence-hero .play-main {
       width: 64px;
@@ -782,10 +797,11 @@
       background: transparent;
     }
     .sentence-translate-btn {
-      margin-top: 0;
+      display: block;
+      margin-top: -2px;
     }
     .sentence-translation-result {
-      margin-top: 8px;
+      margin-top: 4px;
       padding: 0;
       border: 0;
       background: transparent;
@@ -829,7 +845,7 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 6px;
+      gap: 2px;
     }
     .sentence-copy-text {
       flex: 1;
@@ -5789,10 +5805,10 @@
                 </div>
               </div>
               <button id="openReaderMenuBtn" class="reader-topbar-btn menu" title="Opciones" aria-label="Opciones">
-                <svg class="reader-topbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <circle cx="6" cy="12" r="1.9"></circle>
-                  <circle cx="12" cy="12" r="1.9"></circle>
-                  <circle cx="18" cy="12" r="1.9"></circle>
+                <svg class="reader-topbar-icon" viewBox="0 0 32 16" aria-hidden="true" focusable="false">
+                  <circle cx="4.5" cy="8" r="2"></circle>
+                  <circle cx="16" cy="8" r="2"></circle>
+                  <circle cx="27.5" cy="8" r="2"></circle>
                 </svg>
               </button>
             </div>
