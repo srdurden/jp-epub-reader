@@ -73,7 +73,12 @@
     .book-title { margin: 0 0 4px; font-size: 1rem; }
     .meta { margin: 2px 0; color: var(--muted); font-size: 0.85rem; }
     .empty { text-align: center; padding: 32px 12px; color: var(--muted); }
-    .reader-shell { display: grid; gap: 6px; }
+    .reader-shell {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 100vh;
+    }
     .reader-card {
       background: transparent;
       border: 0;
@@ -137,7 +142,7 @@
     }
     .reader-quick-nav {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }
     .reader-quick-nav button {
@@ -184,13 +189,15 @@
     .reader-progress-shell {
       position: relative;
       padding-top: 0;
+      padding-bottom: 34px;
+      overflow: visible;
     }
     .reader-progress-bubble {
       position: absolute;
-      top: -32px;
+      top: calc(100% + 4px);
       left: 0;
-      transform: translateX(-50%) translateY(4px) scale(0.96);
-      transform-origin: center bottom;
+      transform: translateX(-50%) translateY(-4px) scale(0.96);
+      transform-origin: center top;
       background: #4b4b55;
       color: #fff;
       border-radius: 999px;
@@ -276,10 +283,41 @@
       background: color-mix(in srgb, var(--border) 70%, #f3f4f6 30%);
       border-radius: 999px;
     }
+    .reader-footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+      padding: 10px 0 calc(env(safe-area-inset-bottom, 0px) + 10px);
+      pointer-events: none;
+    }
+    .reader-footer-inner {
+      pointer-events: auto;
+    }
+    .reader-footer-mode-btn {
+      min-width: 62px;
+      height: 46px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 94%, #eef2f8 6%);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 0 16px;
+      font-size: 1.25rem;
+      line-height: 1;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+    }
+    .reader-footer-mode-btn:hover {
+      background: color-mix(in srgb, var(--surface) 90%, #e9edf5 10%);
+    }
     .reader-content-wrap {
       position: relative;
       overflow: hidden;
       touch-action: pan-y;
+      flex: 1 1 auto;
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
     }
     .reader-content-wrap.is-dragging {
       user-select: none;
@@ -660,7 +698,7 @@
       justify-content: center;
     }
     .sentence-external-links-row {
-      margin-top: 6px;
+      margin-top: 0;
       padding: 0;
       border: 0;
       border-radius: 0;
@@ -771,22 +809,42 @@
     .meanings-list li { margin: 2px 0; color: var(--muted); }
     .status { color: var(--muted); font-size: 0.9rem; }
     .hidden { display: none !important; }
-    .sentence-hero {
+    .sentence-mode-content {
       display: grid;
-      place-items: center;
+      grid-auto-rows: max-content;
+      row-gap: 0;
+      align-content: start;
+      padding-top: 0;
+    }
+    .sentence-hero {
+      display: flex;
+      justify-content: center;
+      align-items: center;
       padding: 0;
-      margin-bottom: -8px;
+      margin: 0;
     }
     .sentence-box {
-      margin-top: 0;
-      margin-bottom: 0;
+      margin: 0;
+    }
+    .sentence-copy-wrap {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      column-gap: 4px;
+      row-gap: 0;
     }
     .sentence-copy-content {
-      gap: 2px;
+      display: grid;
+      gap: 0;
+      align-items: start;
+    }
+    .sentence-copy-text {
+      margin: 0;
     }
     .sentence-edit-link {
       display: inline-block;
-      margin-top: -2px;
+      margin: 0;
+      line-height: 1;
     }
     .sentence-hero .play-main {
       width: 64px;
@@ -795,13 +853,18 @@
       font-size: 1.35rem;
       border: 2px solid color-mix(in srgb, var(--text) 70%, transparent);
       background: transparent;
+      margin: 0;
     }
     .sentence-translate-btn {
       display: block;
-      margin-top: -2px;
+      margin: 0;
+      padding: 0 !important;
+      line-height: 1.2;
+      text-align: left;
+      width: fit-content;
     }
     .sentence-translation-result {
-      margin-top: 4px;
+      margin-top: 2px;
       padding: 0;
       border: 0;
       background: transparent;
@@ -5668,7 +5731,7 @@
       const sentenceHtml = tokenized.tokens.length
         ? renderSegmentedSentence(tokenized, { segmented: state.settings.showSegmentation })
         : escapeHtml(sentence);
-      const wrapperClass = options.preview ? 'reader-preview-content' : 'reader-content';
+      const wrapperClass = options.preview ? 'reader-preview-content sentence-mode-content' : 'reader-content sentence-mode-content';
       const playButtonAttrs = options.preview
         ? 'class="play-main" title="Reproducir oración" aria-hidden="true" tabindex="-1"'
         : 'id="playSentenceBtn" class="play-main" title="Reproducir oración"';
@@ -5817,7 +5880,6 @@
                 <div class="reader-quick-nav">
                   <button id="prevBtn" title="Anterior" aria-label="Anterior">◀<span>Anterior</span></button>
                   <button id="nextBtn" title="Siguiente" aria-label="Siguiente">▶<span>Siguiente</span></button>
-                  <button id="toggleModeBtn" title="Frase/Página" aria-label="Frase/Página">⇄<span>Frase/Página</span></button>
                   <button id="closeReaderMenuBtn" title="Cerrar menú" aria-label="Cerrar menú">✕<span>Cerrar menú</span></button>
                 </div>
               </div>
@@ -5840,6 +5902,11 @@
           </div>
           <div class="reader-content-wrap">
             ${renderReaderCarousel(initialContext)}
+          </div>
+          <div class="reader-footer">
+            <div class="reader-footer-inner">
+              <button id="toggleModeBtn" class="reader-footer-mode-btn" title="Frase/Página" aria-label="Frase/Página">⇄</button>
+            </div>
           </div>
         </div>
         <div id="tokenPanelHost"></div>
