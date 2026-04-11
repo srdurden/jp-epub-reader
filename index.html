@@ -733,8 +733,12 @@
     .sentence-hero {
       display: grid;
       place-items: center;
-      padding: 4px 0 0;
-      margin-bottom: 2px;
+      padding: 2px 0 0;
+      margin-bottom: 0;
+    }
+    .sentence-box {
+      margin-top: -2px;
+      margin-bottom: 6px;
     }
     .sentence-hero .play-main {
       width: 64px;
@@ -743,6 +747,9 @@
       font-size: 1.35rem;
       border: 2px solid color-mix(in srgb, var(--text) 70%, transparent);
       background: transparent;
+    }
+    .sentence-translate-btn {
+      margin-top: 0;
     }
     .sentence-translation-result {
       margin-top: 8px;
@@ -5617,8 +5624,8 @@
         ? 'class="play-main" title="Reproducir oración" aria-hidden="true" tabindex="-1"'
         : 'id="playSentenceBtn" class="play-main" title="Reproducir oración"';
       const translateButtonAttrs = options.preview
-        ? 'class="icon-btn" style="font-size:1rem;padding:6px 0;" aria-hidden="true" tabindex="-1"'
-        : 'id="translateSentenceBtn" class="icon-btn" style="font-size:1rem;padding:6px 0;"';
+        ? 'class="icon-btn sentence-translate-btn" style="font-size:1rem;padding:6px 0;" aria-hidden="true" tabindex="-1"'
+        : 'id="translateSentenceBtn" class="icon-btn sentence-translate-btn" style="font-size:1rem;padding:6px 0;"';
       const sentenceChatgptAttrs = options.preview
         ? 'class="chatgpt-btn" aria-hidden="true" tabindex="-1"'
         : 'id="sentenceChatgptBtn" class="chatgpt-btn"';
