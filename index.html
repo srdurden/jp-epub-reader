@@ -381,7 +381,7 @@
       text-align: center;
     }
     .sentence-hero-preview {
-      min-height: 122px;
+      min-height: 0;
     }
     .sentence-box {
       font-size: 1em;
@@ -686,7 +686,7 @@
       font-size: 0.9rem;
     }
     .external-links-row {
-      margin-top: 12px;
+      margin-top: 8px;
       padding: 12px;
       border: 1px solid #d1d5db;
       border-radius: 12px;
@@ -812,13 +812,14 @@
       display: grid;
       place-items: center;
       padding: 0;
-      margin: 0 0 -18px;
+      margin: 0 0 -24px;
       flex: 0 0 auto;
     }
     .sentence-box {
       margin-top: 0;
       margin-bottom: 0;
       flex: 0 0 auto;
+      line-height: 1.45;
     }
     .reader-sentence-layout {
       display: flex;
@@ -832,7 +833,7 @@
     }
     .reader-sentence-footer-spacer {
       margin-top: auto;
-      min-height: 8px;
+      min-height: 4px;
       flex: 1 1 auto;
     }
     .reader-footer-bar {
@@ -840,18 +841,20 @@
       display: flex;
       justify-content: center;
       align-items: flex-end;
-      padding: 8px 0 4px;
-      min-height: 74px;
+      padding: 4px 0 2px;
+      min-height: 42px;
     }
     .reader-mode-toggle {
-      min-width: 128px;
-      min-height: 84px;
+      width: 56px;
+      min-width: 56px;
+      height: 42px;
+      min-height: 42px;
       border-radius: 999px;
       border: 1.5px solid color-mix(in srgb, var(--border) 92%, #ddd 8%);
       background: rgba(255,255,255,0.92);
       color: #55515f;
-      box-shadow: 0 10px 24px rgba(0,0,0,0.06);
-      font-size: 1.95rem;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.05);
+      font-size: 1.2rem;
       line-height: 1;
       display: inline-flex;
       align-items: center;
@@ -864,9 +867,29 @@
     .sentence-copy-content {
       gap: 0;
     }
+    .sentence-edit-block {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0;
+      width: 100%;
+      padding-left: 20px;
+      margin-top: -4px;
+      flex: 0 0 auto;
+    }
+    .sentence-actions-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0;
+      width: 100%;
+      margin-top: -6px;
+      flex: 0 0 auto;
+    }
     .sentence-edit-link {
       display: inline-block;
       margin-top: 0;
+      margin-bottom: 0;
     }
     .sentence-hero .play-main {
       width: 64px;
@@ -879,6 +902,7 @@
     .sentence-translate-btn {
       display: block;
       margin-top: 0;
+      margin-bottom: 0;
       padding-top: 0;
       padding-bottom: 0;
       min-height: auto;
@@ -889,9 +913,10 @@
       padding-left: 0;
       padding-right: 0;
       font-size: 1em;
+      line-height: 1.05;
     }
     .sentence-translation-result {
-      margin-top: 2px;
+      margin-top: 0;
       padding: 0;
       flex: 0 0 auto;
       border: 0;
@@ -925,14 +950,17 @@
       transform: scale(1.08);
     }
     .sentence-copy-wrap {
-      display: flex;
-      align-items: flex-start;
-      gap: 4px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      column-gap: 4px;
+      row-gap: 0;
       width: 100%;
     }
     .sentence-copy-text {
       display: block;
-      line-height: 1.55;
+      line-height: 1.45;
+      margin: 0;
     }
     .sentence-copy-content {
       flex: 1;
@@ -940,7 +968,7 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 2px;
+      gap: 0;
     }
     .sentence-copy-text {
       flex: 1;
@@ -967,7 +995,7 @@
     }
     .sentence-edit-panel {
       width: 100%;
-      margin-top: 8px;
+      margin-top: 4px;
       padding: 10px;
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -5811,16 +5839,18 @@
               <button ${copySentenceAttrs}>⧉</button>
               <span class="sentence-copy-content">
                 <span class="sentence-copy-text">${sentenceHtml}</span>
-                ${editorHtml}
               </span>
             </span>
           </div>
+          ${options.preview ? '' : `<div class="sentence-edit-block">${editorHtml}</div>`}
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${tokenized.tokenizationMode === 'manual' ? 'Override manual activo.' : ''} ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
-          <button ${translateButtonAttrs}>Traducir oración</button>
-          ${translationHtml}
-          <div class="external-links-row sentence-external-links-row">
-            <button ${sentenceChatgptAttrs}>ChatGPT</button>
-            <button ${sentenceGoogleTranslateAttrs}>Google Translate</button>
+          <div class="sentence-actions-stack">
+            <button ${translateButtonAttrs}>Traducir oración</button>
+            ${translationHtml}
+            <div class="external-links-row sentence-external-links-row">
+              <button ${sentenceChatgptAttrs}>ChatGPT</button>
+              <button ${sentenceGoogleTranslateAttrs}>Google Translate</button>
+            </div>
           </div>
           <div class="reader-sentence-footer-spacer" aria-hidden="true"></div>
         </div>
