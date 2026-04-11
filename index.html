@@ -1011,7 +1011,7 @@
       vertical-align: baseline;
     }
     .sentence-copy-text {
-      display: block;
+      display: inline;
       line-height: 1.45;
       margin: 0;
     }
@@ -1027,6 +1027,7 @@
       flex: 0 1 auto;
       min-width: 0;
       width: auto;
+      white-space: normal;
     }
     .sentence-copy-line .sentence-edit-link {
       display: inline;
@@ -6310,7 +6311,7 @@
         const elementTarget = target instanceof Element
           ? target
           : target?.parentElement || null;
-        return Boolean(elementTarget?.closest('button, input, textarea, select, a, .token, [data-interactive="1"], #tokenPanelHost, .reader-card'));
+        return Boolean(elementTarget?.closest('button, input, textarea, select, a, #tokenPanelHost, .reader-card'));
       };
       const getPanelWidth = () => swipeSurface.clientWidth || window.innerWidth || 1;
       const hasPrev = () => document.getElementById('readerCarousel')?.dataset.hasPrev === '1';
@@ -6371,7 +6372,7 @@
       };
 
       const onPointerDown = (event) => {
-        if (state.readingMode !== 'sentence') return;
+        if (state.readingMode !== 'sentence' && state.readingMode !== 'page') return;
         if (stateGesture.committing) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         if (isInteractiveTarget(event.target)) {
@@ -6386,7 +6387,6 @@
         stateGesture.t = Date.now();
         stateGesture.active = true;
         stateGesture.dragging = false;
-        try { swipeSurface.setPointerCapture(event.pointerId); } catch (err) {}
         resetTrackPosition({ immediate: true });
       };
 
@@ -6405,6 +6405,7 @@
             return;
           }
           stateGesture.dragging = true;
+          try { swipeSurface.setPointerCapture(event.pointerId); } catch (err) {}
         }
 
         let limitedDx = dx;
@@ -6446,7 +6447,7 @@
       if (document.body.dataset.readerKeyboardSwipeAttached !== '1') {
         document.body.dataset.readerKeyboardSwipeAttached = '1';
         document.addEventListener('keydown', async (event) => {
-          if (event.defaultPrevented || state.route !== 'reader' || state.readingMode !== 'sentence') return;
+          if (event.defaultPrevented || state.route !== 'reader' || (state.readingMode !== 'sentence' && state.readingMode !== 'page')) return;
           if (stateGesture.committing || shouldIgnoreKeyboardEvent(event)) return;
           if (event.key === 'ArrowRight') {
             if (!hasNext()) return;
