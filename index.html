@@ -83,22 +83,33 @@
       top: calc(env(safe-area-inset-top, 0px) + 10px);
       z-index: 12;
     }
-    .reader-close-bubble {
-      position: absolute;
-      top: -16px;
-      right: 16px;
-      width: 38px;
-      height: 38px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--surface-strong);
+    .reader-topbar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+    .reader-topbar-btn {
+      border: 0;
+      background: transparent;
       color: var(--text);
-      font-size: 1rem;
-      font-weight: 600;
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
       display: grid;
       place-items: center;
-      box-shadow: var(--shadow-soft);
-      z-index: 2;
+      cursor: pointer;
+      font-size: 1.8rem;
+      line-height: 1;
+      padding: 0;
+    }
+    .reader-topbar-btn:hover {
+      background: color-mix(in srgb, var(--border) 55%, transparent);
+    }
+    .reader-topbar-btn.menu {
+      font-size: 2rem;
+      letter-spacing: -0.04em;
+      padding-bottom: 2px;
     }
     .reader-quick-nav {
       display: grid;
@@ -5742,20 +5753,26 @@
       app.innerHTML = `
         <div class="reader-shell">
           <div class="reader-card">
-            <button id="readerExitBtn" class="reader-close-bubble" title="Volver al menú principal">✕</button>
-            <div class="reader-quick-nav">
-              <button id="prevBtn" title="Anterior" aria-label="Anterior">◀<span>Anterior</span></button>
-              <button id="nextBtn" title="Siguiente" aria-label="Siguiente">▶<span>Siguiente</span></button>
-              <button id="toggleModeBtn" title="Frase/Página" aria-label="Frase/Página">⇄<span>Frase/Página</span></button>
-              <button id="openReaderMenuBtn" title="Menú" aria-label="Menú">☰<span>Menú</span></button>
-            </div>
-            <div class="reader-progress">
-              <div class="reader-progress-shell" id="pageProgressShell">
-                <div id="pageProgressPreview" class="reader-progress-bubble" aria-hidden="true">Pag. ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</div>
-                <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
+            <div class="reader-topbar">
+              <button id="readerExitBtn" class="reader-topbar-btn" title="Volver al menú principal" aria-label="Volver al menú principal">✕</button>
+              <div class="reader-progress">
+                <div class="reader-progress-shell" id="pageProgressShell">
+                  <div id="pageProgressPreview" class="reader-progress-bubble" aria-hidden="true">Pag. ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</div>
+                  <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
+                </div>
               </div>
+              <button id="openReaderMenuBtn" class="reader-topbar-btn menu" title="Opciones" aria-label="Opciones">···</button>
             </div>
             <div id="readerMenu" class="toolbar reader-menu hidden">
+              <div class="reader-menu-section">
+                <div class="reader-quick-nav">
+                  <button id="prevBtn" title="Anterior" aria-label="Anterior">◀<span>Anterior</span></button>
+                  <button id="nextBtn" title="Siguiente" aria-label="Siguiente">▶<span>Siguiente</span></button>
+                  <button id="toggleModeBtn" title="Frase/Página" aria-label="Frase/Página">⇄<span>Frase/Página</span></button>
+                  <button id="closeReaderMenuBtn" title="Cerrar menú" aria-label="Cerrar menú">✕<span>Cerrar menú</span></button>
+                </div>
+              </div>
+              <div class="reader-menu-divider" aria-hidden="true"></div>
               <div class="reader-menu-section reader-status-strip">
                 <div class="reader-status-title">${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</div>
                 <div class="reader-status-subtitle">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</div>
@@ -5765,7 +5782,6 @@
                   <span class="reader-status-chip">Frase ${sentenceCurrent}/${sentenceTotal}</span>
                 </div>
               </div>
-              <div class="reader-menu-divider" aria-hidden="true"></div>
               <div class="reader-menu-section">
                 <label>aA
                   <input id="fontSize" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
@@ -5838,6 +5854,7 @@
         renderLibraryView();
       });
       $('#openReaderMenuBtn').addEventListener('click', () => $('#readerMenu')?.classList.toggle('hidden'));
+      $('#closeReaderMenuBtn')?.addEventListener('click', () => $('#readerMenu')?.classList.add('hidden'));
       pageProgressInput?.addEventListener('input', showPageProgressPreview);
       pageProgressInput?.addEventListener('pointerdown', showPageProgressPreview);
       pageProgressInput?.addEventListener('touchstart', showPageProgressPreview, { passive: true });
