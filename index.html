@@ -73,43 +73,60 @@
     .book-title { margin: 0 0 4px; font-size: 1rem; }
     .meta { margin: 2px 0; color: var(--muted); font-size: 0.85rem; }
     .empty { text-align: center; padding: 32px 12px; color: var(--muted); }
-    .reader-shell { display: grid; gap: 12px; }
+    .reader-shell { display: grid; gap: 6px; }
     .reader-card {
-      background: color-mix(in srgb, var(--surface) 96%, #e5e7eb 4%);
-      border: 1px solid var(--border);
-      border-radius: 22px;
-      padding: 16px 14px 14px;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      padding: 6px 0 0;
       position: sticky;
-      top: calc(env(safe-area-inset-top, 0px) + 10px);
+      top: calc(env(safe-area-inset-top, 0px) + 4px);
       z-index: 12;
     }
     .reader-topbar {
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      grid-template-columns: 52px minmax(0, 1fr) 52px;
       gap: 12px;
       align-items: center;
+      min-height: 52px;
     }
     .reader-topbar-btn {
       border: 0;
       background: transparent;
-      color: var(--text);
-      width: 40px;
-      height: 40px;
+      color: #4b4b55;
+      width: 52px;
+      height: 52px;
       border-radius: 999px;
       display: grid;
       place-items: center;
       cursor: pointer;
-      font-size: 1.8rem;
       line-height: 1;
       padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
     .reader-topbar-btn:hover {
-      background: color-mix(in srgb, var(--border) 55%, transparent);
+      background: color-mix(in srgb, var(--border) 32%, transparent);
+    }
+    .reader-topbar-btn:active {
+      background: color-mix(in srgb, var(--border) 42%, transparent);
     }
     .reader-topbar-btn.menu {
-      font-size: 2rem;
-      letter-spacing: -0.04em;
-      padding-bottom: 2px;
+      font-size: inherit;
+      letter-spacing: normal;
+      padding-bottom: 0;
+    }
+    .reader-topbar-icon {
+      width: 28px;
+      height: 28px;
+      display: block;
+      pointer-events: none;
+    }
+    .reader-topbar-icon line,
+    .reader-topbar-icon circle {
+      stroke: currentColor;
+      fill: currentColor;
+      stroke-linecap: round;
+      stroke-width: 2.6;
     }
     .reader-quick-nav {
       display: grid;
@@ -153,30 +170,31 @@
       display: grid;
       grid-template-columns: 1fr;
       align-items: center;
-      gap: 10px;
-      margin: 6px 0 2px;
+      gap: 0;
+      margin: 0;
+      min-width: 0;
     }
     .reader-progress-shell {
       position: relative;
-      padding-top: 28px;
+      padding-top: 0;
     }
     .reader-progress-bubble {
       position: absolute;
-      top: 0;
+      top: -32px;
       left: 0;
       transform: translateX(-50%) translateY(4px) scale(0.96);
       transform-origin: center bottom;
-      background: #4caf5a;
+      background: #4b4b55;
       color: #fff;
       border-radius: 999px;
-      padding: 7px 14px;
-      min-width: 86px;
+      padding: 6px 12px;
+      min-width: 74px;
       text-align: center;
-      font-size: 0.98rem;
-      font-weight: 800;
+      font-size: 0.84rem;
+      font-weight: 700;
       line-height: 1;
       letter-spacing: -0.01em;
-      box-shadow: 0 10px 24px rgba(22, 163, 74, 0.24);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
       opacity: 0;
       pointer-events: none;
       transition: opacity 140ms ease, transform 140ms ease;
@@ -191,7 +209,7 @@
       --progress-value: 0%;
       width: 100%;
       padding: 0;
-      height: 12px;
+      height: 28px;
       border: 0;
       border-radius: 999px;
       appearance: none;
@@ -200,43 +218,47 @@
       cursor: pointer;
     }
     .reader-progress input[type="range"]::-webkit-slider-runnable-track {
-      height: 10px;
+      height: 8px;
       border-radius: 999px;
-      background: linear-gradient(to right, #16a34a 0%, #16a34a var(--progress-value), #9ca3af var(--progress-value), #9ca3af 100%);
+      background: linear-gradient(to right, #49a143 0%, #49a143 var(--progress-value), #c4c7ce var(--progress-value), #c4c7ce 100%);
     }
     .reader-progress input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 22px;
-      height: 22px;
-      margin-top: -6px;
+      width: 16px;
+      height: 16px;
+      margin-top: -4px;
       border-radius: 50%;
       border: 0;
-      background: #16a34a;
-      box-shadow: 0 2px 8px rgba(22, 163, 74, 0.35);
+      background: #b8bcc3;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.88);
     }
     .reader-progress input[type="range"]::-moz-range-track {
-      height: 10px;
+      height: 8px;
       border-radius: 999px;
-      background: #9ca3af;
+      background: #c4c7ce;
     }
     .reader-progress input[type="range"]::-moz-range-progress {
-      height: 10px;
+      height: 8px;
       border-radius: 999px;
-      background: #16a34a;
+      background: #49a143;
     }
     .reader-progress input[type="range"]::-moz-range-thumb {
-      width: 22px;
-      height: 22px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
       border: 0;
-      background: #16a34a;
-      box-shadow: 0 2px 8px rgba(22, 163, 74, 0.35);
+      background: #b8bcc3;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.88);
     }
     .reader-menu {
       display: grid;
       gap: 12px;
-      padding-top: 8px;
-      margin-top: 4px;
+      padding: 14px;
+      margin-top: 8px;
+      background: color-mix(in srgb, var(--surface) 96%, #eef1f5 4%);
+      border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+      border-radius: 18px;
+      box-shadow: var(--shadow-soft);
     }
     .reader-menu-section {
       display: grid;
@@ -5754,14 +5776,25 @@
         <div class="reader-shell">
           <div class="reader-card">
             <div class="reader-topbar">
-              <button id="readerExitBtn" class="reader-topbar-btn" title="Volver al menú principal" aria-label="Volver al menú principal">✕</button>
+              <button id="readerExitBtn" class="reader-topbar-btn" title="Volver al menú principal" aria-label="Volver al menú principal">
+                <svg class="reader-topbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <line x1="5" y1="5" x2="19" y2="19"></line>
+                  <line x1="19" y1="5" x2="5" y2="19"></line>
+                </svg>
+              </button>
               <div class="reader-progress">
                 <div class="reader-progress-shell" id="pageProgressShell">
-                  <div id="pageProgressPreview" class="reader-progress-bubble" aria-hidden="true">Pag. ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</div>
+                  <div id="pageProgressPreview" class="reader-progress-bubble" aria-hidden="true">Pág. ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</div>
                   <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
                 </div>
               </div>
-              <button id="openReaderMenuBtn" class="reader-topbar-btn menu" title="Opciones" aria-label="Opciones">···</button>
+              <button id="openReaderMenuBtn" class="reader-topbar-btn menu" title="Opciones" aria-label="Opciones">
+                <svg class="reader-topbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <circle cx="6" cy="12" r="1.9"></circle>
+                  <circle cx="12" cy="12" r="1.9"></circle>
+                  <circle cx="18" cy="12" r="1.9"></circle>
+                </svg>
+              </button>
             </div>
             <div id="readerMenu" class="toolbar reader-menu hidden">
               <div class="reader-menu-section">
@@ -5822,7 +5855,7 @@
         const value = Math.max(min, Math.min(max, Number(pageProgressInput.value) || 0));
         const percent = max > min ? ((value - min) / (max - min)) * 100 : 0;
         pageProgressInput.style.setProperty('--progress-value', `${percent}%`);
-        pageProgressBubble.textContent = `Pag. ${current}/${total}`;
+        pageProgressBubble.textContent = `Pág. ${current}/${total}`;
         pageProgressBubble.style.left = `${left}px`;
         pageProgressBubble.classList.toggle('is-visible', Boolean(visible));
       };
