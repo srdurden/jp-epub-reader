@@ -64,6 +64,12 @@
       padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
       padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
     }
+    .app.reader-app.reader-mode-page {
+      overflow: hidden;
+    }
+    .app.reader-app.reader-mode-sentence {
+      overflow: hidden;
+    }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
     .spacer { flex: 1; }
@@ -310,6 +316,12 @@
       min-height: 0;
       overflow-anchor: none;
     }
+    .reader-content-wrap.reader-content-wrap-page {
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+    }
     .reader-content-wrap.is-dragging {
       user-select: none;
       -webkit-user-select: none;
@@ -320,6 +332,10 @@
       height: 100%;
       overflow: hidden;
     }
+    .reader-content-wrap.reader-content-wrap-page .reader-carousel {
+      height: auto;
+      min-height: 100%;
+    }
     .reader-carousel-track {
       display: flex;
       width: 100%;
@@ -329,6 +345,11 @@
       transform: translate3d(calc(-100% + var(--reader-drag-offset, 0px)), 0, 0);
       transition: transform 220ms ease;
       overflow-anchor: none;
+    }
+    .reader-content-wrap.reader-content-wrap-page .reader-carousel-track {
+      height: auto;
+      min-height: 100%;
+      align-items: flex-start;
     }
     .reader-carousel-track.is-dragging {
       transition: none;
@@ -343,6 +364,12 @@
       overflow: hidden;
       display: flex;
       overflow-anchor: none;
+    }
+    .reader-content-wrap.reader-content-wrap-page .reader-carousel-panel {
+      height: auto;
+      min-height: 100%;
+      overflow: visible;
+      align-items: flex-start;
     }
     .reader-carousel-panel[data-panel-role="prev"],
     .reader-carousel-panel[data-panel-role="next"] {
@@ -362,6 +389,11 @@
       width: 100%;
       max-width: 100%;
       min-width: 0;
+    }
+    .reader-content-wrap.reader-content-wrap-page .reader-content,
+    .reader-content-wrap.reader-content-wrap-page .reader-preview-content {
+      height: auto;
+      min-height: 100%;
     }
     .reader-content iframe,
     .reader-preview-content iframe { width: 100%; min-height: 56vh; border: 0; }
@@ -444,6 +476,9 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
+    }
+    .reader-content-wrap.reader-content-wrap-page .reader-page-frame {
+      min-height: auto;
     }
     .reader-page-footer {
       margin-top: 10px;
@@ -957,6 +992,24 @@
       row-gap: 0;
       width: 100%;
     }
+    .sentence-copy-line {
+      display: inline;
+      line-height: 1.45;
+    }
+    .sentence-inline {
+      display: inline;
+      line-height: inherit;
+    }
+    .sentence-inline.compact .token + .token {
+      margin-left: 0;
+    }
+    .sentence-inline:not(.compact) .token + .token {
+      margin-left: 0.12em;
+    }
+    .sentence-inline .token {
+      display: inline-block;
+      vertical-align: baseline;
+    }
     .sentence-copy-text {
       display: block;
       line-height: 1.45;
@@ -971,9 +1024,15 @@
       gap: 0;
     }
     .sentence-copy-text {
-      flex: 1;
+      flex: 0 1 auto;
       min-width: 0;
-      width: 100%;
+      width: auto;
+    }
+    .sentence-copy-line .sentence-edit-link {
+      display: inline;
+      margin-left: 6px;
+      vertical-align: baseline;
+      white-space: nowrap;
     }
     .sentence-edit-link {
       border: 0;
@@ -3847,10 +3906,12 @@
     }
 
     function renderSentenceTokens(tokens, options = {}) {
-      const { segmented = false } = options;
-      return `<div class="segmented-line ${segmented ? '' : 'compact'}">${
-        tokens.map((token) => `<span ${renderTokenWithKnowledgeState(token)}>${escapeHtml(token.surface)}</span>`).join('')
-      }</div>`;
+      const { segmented = false, inline = false } = options;
+      const tokensHtml = tokens.map((token) => `<span ${renderTokenWithKnowledgeState(token)}>${escapeHtml(token.surface)}</span>`).join('');
+      if (inline) {
+        return `<span class="sentence-inline ${segmented ? '' : 'compact'}">${tokensHtml}</span>`;
+      }
+      return `<div class="segmented-line ${segmented ? '' : 'compact'}">${tokensHtml}</div>`;
     }
 
     function renderSegmentedSentence(payload, options = {}) {
@@ -5792,7 +5853,7 @@
         : { sentence: sentences[idx] || '', tokens: [] };
       const sentence = tokenized.sentence || 'Sin texto legible en esta sección.';
       const sentenceHtml = tokenized.tokens.length
-        ? renderSegmentedSentence(tokenized, { segmented: state.settings.showSegmentation })
+        ? renderSegmentedSentence(tokenized, { segmented: state.settings.showSegmentation, inline: true })
         : escapeHtml(sentence);
       const wrapperClass = options.preview ? 'reader-preview-content' : 'reader-content';
       const playButtonAttrs = options.preview
@@ -5813,9 +5874,8 @@
         : 'id="copySentenceBtn" class="copy-glyph-btn" title="Copiar frase" aria-label="Copiar frase"';
       const manualOverrideRecord = options.preview ? null : getSentenceOverrideRecord(state.currentBookId, safeLocation.sectionIndex, idx, sentence);
       const editorOpen = !options.preview && isSentenceEditorOpen({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx });
-      const editorHtml = options.preview ? '' : `
-        <button id="openSentenceEditorBtn" class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-label="Editar divisiones de la frase">[EDIT]</button>
-        ${editorOpen ? `
+      const editButtonHtml = options.preview ? '' : `<button id="openSentenceEditorBtn" class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-label="Editar divisiones de la frase">[EDIT]</button>`;
+      const editorPanelHtml = options.preview || !editorOpen ? '' : `
           <div class="sentence-edit-panel">
             <textarea id="sentenceEditInput" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off">${escapeHtml(state.sentenceEditor.draft || '')}</textarea>
             <p class="sentence-edit-help">Edita la frase usando espacios para separar o juntar bloques. Solo se permiten cambios de espacios, no de caracteres.</p>
@@ -5827,7 +5887,6 @@
               <button id="cancelSentenceEditBtn" type="button">Cancelar</button>
             </div>
           </div>
-        ` : ''}
       `;
       return `
         <div class="${wrapperClass} reader-sentence-layout" style="font-size:${state.settings.fontSize}px;--reader-font-size:${state.settings.fontSize}px;">
@@ -5838,11 +5897,11 @@
             <span class="sentence-copy-wrap">
               <button ${copySentenceAttrs}>⧉</button>
               <span class="sentence-copy-content">
-                <span class="sentence-copy-text">${sentenceHtml}</span>
+                <span class="sentence-copy-line"><span class="sentence-copy-text">${sentenceHtml}</span>${editButtonHtml}</span>
+                ${editorPanelHtml}
               </span>
             </span>
           </div>
-          ${options.preview ? '' : `<div class="sentence-edit-block">${editorHtml}</div>`}
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${tokenized.tokenizationMode === 'manual' ? 'Override manual activo.' : ''} ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
           <div class="sentence-actions-stack">
             <button ${translateButtonAttrs}>Traducir oración</button>
@@ -5909,7 +5968,7 @@
       state.route = 'reader';
       syncDocumentScrollLock();
       const app = $('#app');
-      if (app) app.className = 'app reader-app';
+      if (app) app.className = `app reader-app reader-mode-${state.readingMode}`;
       const section = state.sections[state.currentSpineIndex];
       const sectionSentences = getSentencesForSection(section);
       const sentenceCurrent = Math.min(Math.max(state.currentSentenceIndex + 1, 1), Math.max(sectionSentences.length, 1));
@@ -5967,7 +6026,7 @@
               </div>
             </div>
           </div>
-          <div class="reader-content-wrap">
+          <div class="reader-content-wrap ${state.readingMode === 'page' ? 'reader-content-wrap-page' : 'reader-content-wrap-sentence'}">
             ${renderReaderCarousel(initialContext)}
           </div>
           <div class="reader-footer-bar">
@@ -6312,6 +6371,7 @@
       };
 
       const onPointerDown = (event) => {
+        if (state.readingMode !== 'sentence') return;
         if (stateGesture.committing) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         if (isInteractiveTarget(event.target)) {
