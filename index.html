@@ -309,6 +309,7 @@
     .sentence-box {
       font-size: 1em;
       line-height: 1.9;
+      margin-top: 0;
       white-space: pre-wrap;
       width: 100%;
       max-width: 100%;
@@ -732,7 +733,8 @@
     .sentence-hero {
       display: grid;
       place-items: center;
-      padding: 4px 0 4px;
+      padding: 4px 0 0;
+      margin-bottom: 2px;
     }
     .sentence-hero .play-main {
       width: 64px;
@@ -776,7 +778,7 @@
       transform: scale(1.08);
     }
     .sentence-copy-wrap {
-      display: inline-flex;
+      display: flex;
       align-items: flex-start;
       gap: 4px;
       width: 100%;
