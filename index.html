@@ -6003,14 +6003,6 @@
               </button>
             </div>
             <div id="readerMenu" class="toolbar reader-menu hidden">
-              <div class="reader-menu-section">
-                <div class="reader-quick-nav" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
-                  <button id="prevBtn" title="Anterior" aria-label="Anterior">◀<span>Anterior</span></button>
-                  <button id="nextBtn" title="Siguiente" aria-label="Siguiente">▶<span>Siguiente</span></button>
-                  <button id="closeReaderMenuBtn" title="Cerrar menú" aria-label="Cerrar menú">✕<span>Cerrar menú</span></button>
-                </div>
-              </div>
-              <div class="reader-menu-divider" aria-hidden="true"></div>
               <div class="reader-menu-section reader-status-strip">
                 <div class="reader-status-title">${escapeHtml(state.currentBook.parsedTitle || state.currentBook.title)}</div>
                 <div class="reader-status-subtitle">${escapeHtml(state.currentBook.parsedAuthor || state.currentBook.author || 'Autor desconocido')}</div>
@@ -6101,7 +6093,6 @@
         renderLibraryView();
       });
       $('#openReaderMenuBtn').addEventListener('click', () => $('#readerMenu')?.classList.toggle('hidden'));
-      $('#closeReaderMenuBtn')?.addEventListener('click', () => $('#readerMenu')?.classList.add('hidden'));
       pageProgressInput?.addEventListener('input', showPageProgressPreview);
       pageProgressInput?.addEventListener('pointerdown', showPageProgressPreview);
       pageProgressInput?.addEventListener('touchstart', showPageProgressPreview, { passive: true });
@@ -6117,8 +6108,6 @@
         await persistCurrentProgress();
         renderReaderView({ alignToCurrentSentence: true });
       });
-      $('#prevBtn').addEventListener('click', prevStep);
-      $('#nextBtn').addEventListener('click', nextStep);
       $('#toggleModeBtn').addEventListener('click', () => {
         const targetMode = state.readingMode === 'page' ? 'sentence' : 'page';
         setReadingMode(targetMode);
