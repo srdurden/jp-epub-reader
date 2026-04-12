@@ -936,32 +936,96 @@
     }
     .sentence-translate-btn {
       display: block;
-      margin-top: 0;
-      margin-bottom: 0;
-      padding-top: 0;
-      padding-bottom: 0;
+      width: 100%;
+      margin: 0;
+      padding: 0;
       min-height: auto;
-      width: fit-content;
       border: 0;
       background: transparent;
       border-radius: 0;
-      padding-left: 0;
-      padding-right: 0;
+      text-align: left;
       font-size: 1em;
-      line-height: 1.05;
+      line-height: 1.2;
+      cursor: pointer;
+      position: relative;
+      color: inherit;
+      -webkit-tap-highlight-color: transparent;
     }
-    .sentence-translation-result {
-      margin-top: 0;
-      padding: 0;
-      flex: 0 0 auto;
-      border: 0;
-      background: transparent;
+    .sentence-translate-btn .sentence-translation-text {
+      display: block;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-word;
+      transition: filter 180ms ease, opacity 180ms ease, color 180ms ease, transform 180ms ease;
     }
-    .sentence-translation-result.is-error {
+    .sentence-translate-btn.is-placeholder .sentence-translation-text {
+      filter: blur(7px);
+      opacity: 0.42;
+      color: color-mix(in srgb, var(--text) 68%, transparent);
+      transform: translateY(1px);
+      user-select: none;
+    }
+    .sentence-translate-btn.is-placeholder::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0.14),
+        rgba(255,255,255,0.28) 44%,
+        rgba(255,255,255,0.14)
+      );
+    }
+    [data-theme="dark"] .sentence-translate-btn.is-placeholder::after {
+      background: linear-gradient(
+        to bottom,
+        rgba(17,22,40,0.12),
+        rgba(17,22,40,0.22) 44%,
+        rgba(17,22,40,0.12)
+      );
+    }
+    .sentence-translate-btn.is-loading .sentence-translation-text {
+      color: var(--muted);
+    }
+    .sentence-translate-btn.is-success .sentence-translation-text {
+      color: var(--text);
+      filter: none;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .sentence-translate-btn.is-error .sentence-translation-text {
       color: var(--danger);
+      filter: none;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .sentence-translate-btn:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--primary) 52%, transparent);
+      outline-offset: 6px;
+      border-radius: 10px;
+    }
+    .sentence-helper-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 4px;
+    }
+    .sentence-helper-link {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 0;
+      margin: 0;
+      font: inherit;
+      font-size: 0.76rem;
+      line-height: 1.1;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+    }
+    .sentence-helper-link:hover {
+      color: var(--text);
     }
     .sentence-translation-label { display: none; }
     .copy-glyph-btn {
@@ -2482,8 +2546,9 @@
       };
     }
 
-    function getSentenceTranslationViewModel(location) {
+    function getSentenceTranslationViewModel(location, sourceText = '') {
       const translation = state.sentenceTranslation;
+      const placeholderText = `${sourceText || ''}`.trim();
       const matches = Boolean(
         translation
         && translation.bookId
@@ -2491,39 +2556,89 @@
         && Number(translation.sectionIndex) === Number(location?.sectionIndex)
         && Number(translation.sentenceIndex) === Number(location?.sentenceIndex)
       );
-      if (!matches) return { visible: false, kind: 'empty', label: '', text: '' };
-      if (translation.status === 'loading') {
-        return { visible: true, kind: 'loading', label: '', text: 'Traduciendo…' };
+      if (matches) {
+        if (translation.status === 'loading') {
+          return { visible: true, kind: 'loading', label: '', text: 'Traduciendo…' };
+        }
+        if (translation.status === 'success') {
+          return { visible: true, kind: 'success', label: '', text: translation.translatedText || '' };
+        }
+        if (translation.status === 'error') {
+          return { visible: true, kind: 'error', label: '', text: translation.error || 'No se pudo traducir la oración.' };
+        }
       }
-      if (translation.status === 'success') {
-        return { visible: true, kind: 'success', label: '', text: translation.translatedText || '' };
-      }
-      if (translation.status === 'error') {
-        return { visible: true, kind: 'error', label: '', text: translation.error || 'No se pudo traducir la oración.' };
+      if (placeholderText) {
+        return { visible: true, kind: 'placeholder', label: '', text: placeholderText };
       }
       return { visible: false, kind: 'empty', label: '', text: '' };
     }
 
-    function renderSentenceTranslationResult(location, options = {}) {
+    function getSentenceTranslationButtonMeta(view) {
+      const kind = view?.kind || 'empty';
+      if (kind === 'loading') {
+        return {
+          title: 'Traduciendo oración…',
+          ariaLabel: 'Traduciendo oración',
+          disabled: true
+        };
+      }
+      if (kind === 'success') {
+        return {
+          title: 'Traducción revelada',
+          ariaLabel: 'Traducción revelada',
+          disabled: false
+        };
+      }
+      if (kind === 'error') {
+        return {
+          title: 'Error al traducir. Toca para reintentar.',
+          ariaLabel: 'Error al traducir. Toca para reintentar',
+          disabled: false
+        };
+      }
+      return {
+        title: 'Toca para revelar la traducción',
+        ariaLabel: 'Revelar traducción',
+        disabled: false
+      };
+    }
+
+    function buildSentenceTranslationMarkup(view) {
+      if (!view?.visible) return '';
+      return `<span class="sentence-translation-text">${escapeHtml(view.text || '')}</span>`;
+    }
+
+    function applySentenceTranslationViewToElement(host, view) {
+      if (!host) return;
+      const kind = view?.kind || 'empty';
+      const meta = getSentenceTranslationButtonMeta(view);
+      host.classList.toggle('hidden', !view?.visible);
+      host.classList.remove('is-placeholder', 'is-loading', 'is-success', 'is-error', 'is-empty');
+      host.classList.add(`is-${kind}`);
+      host.disabled = Boolean(meta.disabled);
+      host.setAttribute('aria-label', meta.ariaLabel);
+      host.setAttribute('title', meta.title);
+      host.setAttribute('aria-busy', kind === 'loading' ? 'true' : 'false');
+      host.innerHTML = buildSentenceTranslationMarkup(view);
+    }
+
+    function renderSentenceTranslationResult(location, sourceText, options = {}) {
       if (options.preview) return '';
-      const view = getSentenceTranslationViewModel(location);
+      const view = getSentenceTranslationViewModel(location, sourceText);
+      const meta = getSentenceTranslationButtonMeta(view);
       return `
-        <div id="sentenceTranslationResult" class="sentence-translation-result ${view.visible ? '' : 'hidden'} ${view.kind === 'error' ? 'is-error' : ''}" aria-live="polite">
-          ${view.visible ? escapeHtml(view.text) : ''}
-        </div>
+        <button id="translateSentenceBtn" class="sentence-translate-btn is-${view.kind}" type="button" aria-busy="${view.kind === 'loading' ? 'true' : 'false'}" aria-label="${escapeHtml(meta.ariaLabel)}" title="${escapeHtml(meta.title)}" ${meta.disabled ? 'disabled' : ''}>
+          ${buildSentenceTranslationMarkup(view)}
+        </button>
       `;
     }
 
     function refreshCurrentSentenceTranslationResult() {
-      const host = $('#sentenceTranslationResult');
+      const host = $('#translateSentenceBtn');
       if (!host || state.readingMode !== 'sentence') return;
       const location = getNormalizedReaderLocation({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex });
-      const view = getSentenceTranslationViewModel(location);
-      host.classList.toggle('hidden', !view.visible);
-      host.classList.toggle('is-error', view.kind === 'error');
-      host.innerHTML = view.visible
-        ? escapeHtml(view.text)
-        : '';
+      const view = getSentenceTranslationViewModel(location, getCurrentSentenceText());
+      applySentenceTranslationViewToElement(host, view);
     }
 
     async function translateSentenceWithAzure(textToTranslate) {
@@ -5857,16 +5972,13 @@
       const playButtonAttrs = options.preview
         ? 'class="play-main" title="Reproducir oración" aria-hidden="true" tabindex="-1"'
         : 'id="playSentenceBtn" class="play-main" title="Reproducir oración"';
-      const translateButtonAttrs = options.preview
-        ? 'class="icon-btn sentence-translate-btn" style="font-size:1rem;padding:6px 0;" aria-hidden="true" tabindex="-1"'
-        : 'id="translateSentenceBtn" class="icon-btn sentence-translate-btn" style="font-size:1rem;padding:6px 0;"';
       const sentenceChatgptAttrs = options.preview
-        ? 'class="chatgpt-btn" aria-hidden="true" tabindex="-1"'
-        : 'id="sentenceChatgptBtn" class="chatgpt-btn"';
+        ? 'class="sentence-helper-link" type="button" aria-hidden="true" tabindex="-1"'
+        : 'id="sentenceChatgptBtn" class="sentence-helper-link" type="button"';
       const sentenceGoogleTranslateAttrs = options.preview
-        ? 'class="chatgpt-btn" aria-hidden="true" tabindex="-1"'
-        : 'id="sentenceGoogleTranslateBtn" class="chatgpt-btn"';
-      const translationHtml = renderSentenceTranslationResult({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx }, options);
+        ? 'class="sentence-helper-link" type="button" aria-hidden="true" tabindex="-1"'
+        : 'id="sentenceGoogleTranslateBtn" class="sentence-helper-link" type="button"';
+      const translationHtml = renderSentenceTranslationResult({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx }, sentence, options);
       const copySentenceAttrs = options.preview
         ? 'class="copy-glyph-btn" title="Copiar frase" aria-hidden="true" tabindex="-1"'
         : 'id="copySentenceBtn" class="copy-glyph-btn" title="Copiar frase" aria-label="Copiar frase"';
@@ -5902,11 +6014,10 @@
           </div>
           ${!options.preview && state.settings.tokenDebug ? `<p class="status">Tokenización: ${tokenized.tokens.length} tokens analizados. ${tokenized.tokenizationMode === 'manual' ? 'Override manual activo.' : ''} ${state.settings.showSegmentation ? 'Segmentación visible.' : 'Segmentación oculta.'}</p>` : ''}
           <div class="sentence-actions-stack">
-            <button ${translateButtonAttrs}>Traducir oración</button>
             ${translationHtml}
-            <div class="external-links-row sentence-external-links-row">
-              <button ${sentenceChatgptAttrs}>ChatGPT</button>
-              <button ${sentenceGoogleTranslateAttrs}>Google Translate</button>
+            <div class="sentence-helper-links">
+              <button ${sentenceChatgptAttrs}>[ChatGPT]</button>
+              <button ${sentenceGoogleTranslateAttrs}>[Google Translate]</button>
             </div>
           </div>
           <div class="reader-sentence-footer-spacer" aria-hidden="true"></div>
@@ -6175,6 +6286,9 @@
         $('#translateSentenceBtn')?.addEventListener('click', async () => {
           const currentSentence = getCurrentSentenceText();
           if (!currentSentence.trim()) return;
+          const currentLocation = getNormalizedReaderLocation({ sectionIndex: state.currentSpineIndex, sentenceIndex: state.currentSentenceIndex });
+          const currentView = getSentenceTranslationViewModel(currentLocation, currentSentence);
+          if (currentView.kind === 'loading' || currentView.kind === 'success') return;
           state.sentenceTranslation = {
             bookId: state.currentBookId,
             sectionIndex: state.currentSpineIndex,
