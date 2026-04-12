@@ -437,7 +437,13 @@
       word-break: break-word;
     }
     .page-sentence {
-      margin: 0 0 0.4em;
+      margin: 0;
+      max-width: 100%;
+      min-width: 0;
+      display: inline;
+    }
+    .page-paragraph {
+      margin: 0 0 0.7em;
       max-width: 100%;
       min-width: 0;
     }
@@ -1791,6 +1797,7 @@
       readingMode: 'page',
       sections: [],
       sectionSentencesCache: new Map(),
+      sectionParagraphsCache: new Map(),
       sentenceTokenCache: new Map(),
       pageMapsCache: new Map(),
       pageSummariesCache: new Map(),
@@ -2459,6 +2466,7 @@
       state.currentSpineIndex = 0;
       state.currentSentenceIndex = 0;
       state.sectionSentencesCache.clear();
+      state.sectionParagraphsCache.clear();
       state.sentenceTokenCache.clear();
       state.pageMapsCache.clear();
       state.pageSummariesCache.clear();
@@ -2859,36 +2867,69 @@
     // Modo frase (heurística)
     // =========================
     function splitTextIntoSentences(text) {
+      return splitTextIntoParagraphSentenceStructure(text).sentences;
+    }
+
+    function splitBlockIntoSentences(blockText) {
+      const paragraph = String(blockText || '')
+        .replace(/\n+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!paragraph) return [];
+      const withBreaks = paragraph.replace(/([。！？!?])\s*/g, '$1\n');
+      const parts = withBreaks
+        .split('\n')
+        .map((part) => part.trim())
+        .filter(Boolean);
+      return parts.length ? parts : [paragraph];
+    }
+
+    function splitTextIntoParagraphSentenceStructure(text) {
       const normalized = String(text || '')
         .replace(/\r\n?/g, '\n')
         .replace(/\u3000/g, ' ')
         .trim();
-      if (!normalized) return [];
+      if (!normalized) return { sentences: [], paragraphs: [] };
 
-      const sentenceList = [];
+      const sentences = [];
+      const paragraphs = [];
       const blocks = normalized
         .split(/\n{2,}/)
         .map((block) => block.replace(/[ \t]+/g, ' ').trim())
         .filter(Boolean);
 
       blocks.forEach((block) => {
-        const paragraph = block
-          .replace(/\n+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        const withBreaks = paragraph
-          .replace(/([。！？!?])\s*/g, '$1\n');
-        withBreaks
-          .split('\n')
-          .map((part) => part.trim())
-          .filter(Boolean)
-          .forEach((part) => sentenceList.push(part));
+        const paragraphEntry = { lines: [] };
+        const lines = block
+          .split(/\n+/)
+          .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+          .filter(Boolean);
+        if (!lines.length) return;
+        lines.forEach((line) => {
+          const lineSentences = splitBlockIntoSentences(line);
+          const sentenceIndexes = lineSentences.map((sentence) => {
+            const index = sentences.length;
+            sentences.push(sentence);
+            return index;
+          });
+          if (sentenceIndexes.length) {
+            paragraphEntry.lines.push({ sentenceIndexes });
+          }
+        });
+        if (paragraphEntry.lines.length) {
+          paragraphs.push(paragraphEntry);
+        }
       });
 
-      if (!sentenceList.length) {
-        return [normalized.replace(/\s+/g, ' ').trim()];
+      if (!sentences.length) {
+        const fallbackSentence = normalized.replace(/\s+/g, ' ').trim();
+        if (!fallbackSentence) return { sentences: [], paragraphs: [] };
+        return {
+          sentences: [fallbackSentence],
+          paragraphs: [{ lines: [{ sentenceIndexes: [0] }] }]
+        };
       }
-      return sentenceList;
+      return { sentences, paragraphs };
     }
 
     function stripRubyAnnotationsFromDocument(doc) {
@@ -2913,10 +2954,18 @@
 
     function getSentencesForSection(section) {
       if (state.sectionSentencesCache.has(section.path)) return state.sectionSentencesCache.get(section.path);
-      const text = extractVisibleTextFromSection(section.html);
-      const sentences = splitTextIntoSentences(text);
+      const structure = getParagraphSentenceStructureForSection(section);
+      const sentences = structure.sentences;
       state.sectionSentencesCache.set(section.path, sentences);
       return sentences;
+    }
+
+    function getParagraphSentenceStructureForSection(section) {
+      if (state.sectionParagraphsCache.has(section.path)) return state.sectionParagraphsCache.get(section.path);
+      const text = extractVisibleTextFromSection(section.html);
+      const structure = splitTextIntoParagraphSentenceStructure(text);
+      state.sectionParagraphsCache.set(section.path, structure);
+      return structure;
     }
 
     // =========================
@@ -3968,11 +4017,33 @@
       const page = footerPageInfo.page;
       const visibleSentences = tokenizedSentences.slice(page.startSentence, page.endSentence + 1);
       const activeSentenceIndex = Number.isInteger(options.activeSentenceIndex) ? options.activeSentenceIndex : null;
-      return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${visibleSentences.map((payload, offset) => {
+      const payloadBySentenceIndex = new Map();
+      visibleSentences.forEach((payload, offset) => {
+        payloadBySentenceIndex.set(page.startSentence + offset, payload);
+      });
+      const structure = getParagraphSentenceStructureForSection(state.sections[sectionIndex] || {});
+      const paragraphsHtml = (structure.paragraphs || []).map((paragraph) => {
+        const linesHtml = (paragraph.lines || []).map((line) => {
+          const sentenceHtml = (line.sentenceIndexes || [])
+            .filter((realSentenceIndex) => payloadBySentenceIndex.has(realSentenceIndex))
+            .map((realSentenceIndex) => {
+              const payload = payloadBySentenceIndex.get(realSentenceIndex);
+              const isCurrentSentence = activeSentenceIndex !== null && realSentenceIndex === activeSentenceIndex;
+              return `<span class="page-sentence ${isCurrentSentence ? 'current-sentence' : ''}" data-section-index="${sectionIndex}" data-sentence-index="${realSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation, inline: true })}</span>`;
+            })
+            .join('');
+          if (!sentenceHtml) return '';
+          return `<span class="page-line">${sentenceHtml}</span>`;
+        }).filter(Boolean);
+        if (!linesHtml.length) return '';
+        return `<p class="page-paragraph">${linesHtml.join('<br>')}</p>`;
+      }).filter(Boolean).join('');
+      const fallbackHtml = visibleSentences.map((payload, offset) => {
         const realSentenceIndex = page.startSentence + offset;
         const isCurrentSentence = activeSentenceIndex !== null && realSentenceIndex === activeSentenceIndex;
-        return `<p class="page-sentence ${isCurrentSentence ? 'current-sentence' : ''}" data-section-index="${sectionIndex}" data-sentence-index="${realSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation })}</p>`;
-      }).join('')}</div><div class="reader-page-footer">Pg ${footerPageInfo.globalPageCurrent}/${footerPageInfo.globalPageTotal}</div></div>`;
+        return `<span class="page-sentence ${isCurrentSentence ? 'current-sentence' : ''}" data-section-index="${sectionIndex}" data-sentence-index="${realSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation, inline: true })}</span>`;
+      }).join('');
+      return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${paragraphsHtml || fallbackHtml}</div><div class="reader-page-footer">Pg ${footerPageInfo.globalPageCurrent}/${footerPageInfo.globalPageTotal}</div></div>`;
     }
 
     function alignPageModeToCurrentSentence() {
@@ -4979,6 +5050,7 @@
       state.readingMode = progress?.readingMode || 'page';
       state.currentSentenceIndex = progress?.currentSentenceIndex || 0;
       state.sectionSentencesCache.clear();
+      state.sectionParagraphsCache.clear();
       state.sentenceTokenCache.clear();
       state.pageMapsCache.clear();
       state.pageSummariesCache.clear();
