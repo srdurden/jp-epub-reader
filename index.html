@@ -959,9 +959,9 @@
       transition: filter 180ms ease, opacity 180ms ease, color 180ms ease, transform 180ms ease;
     }
     .sentence-translate-btn.is-placeholder .sentence-translation-text {
-      filter: blur(7px);
-      opacity: 0.42;
-      color: color-mix(in srgb, var(--text) 68%, transparent);
+      filter: blur(9px);
+      opacity: 0.68;
+      color: color-mix(in srgb, var(--text) 88%, transparent);
       transform: translateY(1px);
       user-select: none;
     }
@@ -972,17 +972,17 @@
       pointer-events: none;
       background: linear-gradient(
         to bottom,
-        rgba(255,255,255,0.14),
-        rgba(255,255,255,0.28) 44%,
-        rgba(255,255,255,0.14)
+        rgba(255,255,255,0.08),
+        rgba(255,255,255,0.16) 44%,
+        rgba(255,255,255,0.08)
       );
     }
     [data-theme="dark"] .sentence-translate-btn.is-placeholder::after {
       background: linear-gradient(
         to bottom,
-        rgba(17,22,40,0.12),
-        rgba(17,22,40,0.22) 44%,
-        rgba(17,22,40,0.12)
+        rgba(17,22,40,0.08),
+        rgba(17,22,40,0.14) 44%,
+        rgba(17,22,40,0.08)
       );
     }
     .sentence-translate-btn.is-loading .sentence-translation-text {
