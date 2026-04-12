@@ -5470,6 +5470,7 @@
     // Renderizado UI + Router
     // =========================
     let libraryOutsideClickHandler = null;
+    let readerMenuOutsideClickHandler = null;
 
     async function refreshBooks() {
       state.books = await listBooks();
@@ -5994,7 +5995,7 @@
                   <input id="pageProgress" type="range" min="0" max="${Math.max(pageInfo.globalPageTotal - 1, 0)}" value="${Math.max(pageInfo.globalPageCurrent - 1, 0)}" />
                 </div>
               </div>
-              <button id="openReaderMenuBtn" class="reader-topbar-btn menu" title="Opciones" aria-label="Opciones">
+              <button id="openReaderMenuBtn" class="reader-topbar-btn menu" title="Opciones" aria-label="Opciones" aria-expanded="false" aria-controls="readerMenu">
                 <svg class="reader-topbar-icon" viewBox="0 0 24 8" aria-hidden="true" focusable="false">
                   <circle cx="3" cy="4" r="1.4"></circle>
                   <circle cx="12" cy="4" r="1.4"></circle>
@@ -6086,13 +6087,41 @@
       const handleReaderResize = () => updatePageProgressPreview(pageProgressBubble?.classList.contains('is-visible'));
       window.addEventListener('resize', handleReaderResize, { passive: true });
 
+      const readerMenu = $('#readerMenu');
+      const openReaderMenuBtn = $('#openReaderMenuBtn');
+      const closeReaderMenu = () => {
+        readerMenu?.classList.add('hidden');
+        openReaderMenuBtn?.setAttribute('aria-expanded', 'false');
+      };
+      const toggleReaderMenu = () => {
+        const willOpen = readerMenu?.classList.contains('hidden');
+        if (willOpen) {
+          readerMenu?.classList.remove('hidden');
+          openReaderMenuBtn?.setAttribute('aria-expanded', 'true');
+        } else {
+          closeReaderMenu();
+        }
+      };
+
       $('#readerExitBtn').addEventListener('click', async () => {
         closeTokenPanel();
         await persistCurrentProgress();
         await refreshBooks();
         renderLibraryView();
       });
-      $('#openReaderMenuBtn').addEventListener('click', () => $('#readerMenu')?.classList.toggle('hidden'));
+      openReaderMenuBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleReaderMenu();
+      });
+      if (readerMenuOutsideClickHandler) {
+        document.removeEventListener('click', readerMenuOutsideClickHandler);
+      }
+      readerMenuOutsideClickHandler = (e) => {
+        if (!readerMenu || readerMenu.classList.contains('hidden')) return;
+        if (readerMenu.contains(e.target) || openReaderMenuBtn?.contains(e.target)) return;
+        closeReaderMenu();
+      };
+      document.addEventListener('click', readerMenuOutsideClickHandler);
       pageProgressInput?.addEventListener('input', showPageProgressPreview);
       pageProgressInput?.addEventListener('pointerdown', showPageProgressPreview);
       pageProgressInput?.addEventListener('touchstart', showPageProgressPreview, { passive: true });
@@ -6112,7 +6141,10 @@
         const targetMode = state.readingMode === 'page' ? 'sentence' : 'page';
         setReadingMode(targetMode);
       });
-      if (keepMenuOpen) $('#readerMenu')?.classList.remove('hidden');
+      if (keepMenuOpen) {
+        readerMenu?.classList.remove('hidden');
+        openReaderMenuBtn?.setAttribute('aria-expanded', 'true');
+      }
 
       $('#fontSize').addEventListener('input', async (e) => {
         const nextSize = Math.max(14, Math.min(30, Number(e.target.value) || 18));
