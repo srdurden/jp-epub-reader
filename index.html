@@ -309,30 +309,38 @@
       margin-left: 4px;
     }
     .reader-font-stepper {
-      display: grid;
+      display: inline-grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      width: 8.2rem;
+      width: 11rem;
+      max-width: 100%;
       justify-self: start;
       border-radius: 999px;
       overflow: hidden;
       background: color-mix(in srgb, var(--surface-soft) 82%, var(--border) 18%);
       border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
     }
     .reader-font-stepper button {
       border: 0;
       border-radius: 0;
-      min-height: 4rem;
-      padding: 0 0 0.45rem;
+      min-height: 3.8rem;
+      padding: 0;
       background: transparent;
       color: var(--text);
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       justify-content: center;
       font-weight: 700;
       line-height: 1;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
       transition: background-color 120ms ease, opacity 120ms ease;
+    }
+    .reader-font-stepper button .font-size-label {
+      display: block;
+      line-height: 1;
+      transform: translateY(0.02em);
+      pointer-events: none;
     }
     .reader-font-stepper button:hover {
       background: color-mix(in srgb, var(--border) 32%, transparent);
@@ -347,11 +355,11 @@
       opacity: 0.4;
       cursor: not-allowed;
     }
-    .reader-font-stepper .font-size-small {
-      font-size: 0.85rem;
+    .reader-font-stepper .font-size-small .font-size-label {
+      font-size: 1.5rem;
     }
-    .reader-font-stepper .font-size-large {
-      font-size: 2rem;
+    .reader-font-stepper .font-size-large .font-size-label {
+      font-size: 2.3rem;
     }
     .reader-menu-divider {
       height: 1px;
@@ -6441,8 +6449,8 @@
               <div class="reader-menu-section">
                 <span class="reader-font-control-label">Tamaño de letra</span>
                 <div class="reader-font-stepper" role="group" aria-label="Ajustar tamaño de letra">
-                  <button id="fontSizeDecrease" type="button" class="font-size-small" aria-label="Hacer letra más pequeña" ${state.settings.fontSize <= 14 ? 'disabled' : ''}>A</button>
-                  <button id="fontSizeIncrease" type="button" class="font-size-large" aria-label="Hacer letra más grande" ${state.settings.fontSize >= 30 ? 'disabled' : ''}>A</button>
+                  <button id="fontSizeDecrease" type="button" class="font-size-small" aria-label="Hacer letra más pequeña" ${state.settings.fontSize <= 14 ? 'disabled' : ''}><span class="font-size-label" aria-hidden="true">A</span></button>
+                  <button id="fontSizeIncrease" type="button" class="font-size-large" aria-label="Hacer letra más grande" ${state.settings.fontSize >= 30 ? 'disabled' : ''}><span class="font-size-label" aria-hidden="true">A</span></button>
                 </div>
               </div>
             </div>
@@ -6537,8 +6545,12 @@
         renderLibraryView();
       });
       openReaderMenuBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
         toggleReaderMenu();
+      });
+      readerMenu?.addEventListener('click', (e) => {
+        e.stopPropagation();
       });
       if (readerMenuOutsideClickHandler) {
         document.removeEventListener('click', readerMenuOutsideClickHandler);
@@ -6584,10 +6596,14 @@
         await saveSettings({ fontSize: nextSize });
         await persistCurrentProgress();
       };
-      $('#fontSizeDecrease')?.addEventListener('click', () => {
+      $('#fontSizeDecrease')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         applyReaderFontSize(state.settings.fontSize - 1);
       });
-      $('#fontSizeIncrease')?.addEventListener('click', () => {
+      $('#fontSizeIncrease')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         applyReaderFontSize(state.settings.fontSize + 1);
       });
 
