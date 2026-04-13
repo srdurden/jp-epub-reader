@@ -1953,12 +1953,26 @@
     }
 
     function renderSentenceEditMirrorHtml(text = '') {
-      return Array.from(text).map((char) => {
-        if (char === '\n') return '<br>';
-        if (char === ' ') return '<span class="sentence-edit-space">&nbsp;</span>';
-        if (char === '\t') return '<span class="sentence-edit-space">&nbsp;&nbsp;&nbsp;&nbsp;</span>';
-        return `<span class="sentence-edit-char">${escapeHtml(char)}</span>`;
-      }).join('');
+      const chars = Array.from(text || '');
+      let html = '';
+      let pendingSpaceMarker = false;
+      for (const char of chars) {
+        if (char === '\n') {
+          pendingSpaceMarker = false;
+          html += '<br>';
+          continue;
+        }
+        if (char === ' ' || char === '\t') {
+          if (!pendingSpaceMarker) {
+            html += '<span class="sentence-edit-space">&nbsp;</span>';
+            pendingSpaceMarker = true;
+          }
+          continue;
+        }
+        pendingSpaceMarker = false;
+        html += `<span class="sentence-edit-char">${escapeHtml(char)}</span>`;
+      }
+      return html;
     }
 
     function syncSentenceEditPreview() {
@@ -6143,7 +6157,6 @@
             </div>
             <p class="sentence-edit-preview-label" aria-hidden="true">Espacios marcados</p>
             <div id="sentenceEditPreview" class="sentence-edit-visual-preview" aria-hidden="true">${renderSentenceEditMirrorHtml(state.sentenceEditor.draft || '')}</div>
-            <p class="sentence-edit-help">Edita la frase usando espacios para separar o juntar bloques. Solo se permiten cambios de espacios, no de caracteres.</p>
             ${state.sentenceEditor.error ? `<p class="sentence-edit-error">${escapeHtml(state.sentenceEditor.error)}</p>` : ''}
             <div class="sentence-edit-actions">
               <button id="saveSentenceEditBtn" class="primary" type="button">Guardar</button>
