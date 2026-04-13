@@ -1538,25 +1538,10 @@
       border-radius: 999px;
       display: grid;
       place-items: center;
-      color: color-mix(in srgb, var(--text) 88%, transparent);
-      background: color-mix(in srgb, var(--surface-strong) 82%, var(--surface-soft) 18%);
-      border: 1px solid var(--border);
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1;
       box-shadow: 0 3px 10px rgba(92, 83, 122, 0.08);
-    }
-    .book-control-icon {
-      display: block;
-      width: 18px;
-      height: 18px;
-      flex: none;
-    }
-    .book-delete-btn .book-control-icon {
-      width: 17px;
-      height: 17px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.8;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
     .segmented-toggle {
       display: inline-grid;
@@ -1701,10 +1686,6 @@
         height: 32px;
         right: -8px;
         top: -8px;
-      }
-      .book-delete-btn .book-control-icon {
-        width: 14px;
-        height: 14px;
       }
     }
     @media (max-width: 430px) {
@@ -5864,7 +5845,7 @@
                     <span>${rightLabel}</span>
                   </div>
                 </div>
-                <button data-delete="${b.id}" class="book-delete-btn" title="Borrar libro" aria-label="Borrar libro"><svg class="book-control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.5h15"></path><path d="M9.5 3.75h5"></path><path d="M8 7.5v10.25a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7.5"></path><path d="M10.25 10.5v4.75"></path><path d="M13.75 10.5v4.75"></path></svg></button>
+                <button data-delete="${b.id}" class="book-delete-btn danger" title="Borrar libro" aria-label="Borrar libro">✕</button>
               </article>`;
           }).join('') : ''}
             <article id="uploadBookTile" class="book-tile upload-book-tile" role="button" tabindex="0" aria-label="Subir EPUB">
