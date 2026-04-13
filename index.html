@@ -311,7 +311,7 @@
     .reader-font-stepper {
       display: inline-grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      width: 11rem;
+      width: 6.4rem;
       max-width: 100%;
       justify-self: start;
       border-radius: 999px;
@@ -323,7 +323,7 @@
     .reader-font-stepper button {
       border: 0;
       border-radius: 0;
-      min-height: 3.8rem;
+      min-height: 2.4rem;
       padding: 0;
       background: transparent;
       color: var(--text);
@@ -356,10 +356,10 @@
       cursor: not-allowed;
     }
     .reader-font-stepper .font-size-small .font-size-label {
-      font-size: 1.5rem;
+      font-size: 0.85rem;
     }
     .reader-font-stepper .font-size-large .font-size-label {
-      font-size: 2.3rem;
+      font-size: 1.7rem;
     }
     .reader-menu-divider {
       height: 1px;
@@ -6599,12 +6599,12 @@
       $('#fontSizeDecrease')?.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        applyReaderFontSize(state.settings.fontSize - 1);
+        applyReaderFontSize(state.settings.fontSize - 3);
       });
       $('#fontSizeIncrease')?.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        applyReaderFontSize(state.settings.fontSize + 1);
+        applyReaderFontSize(state.settings.fontSize + 3);
       });
 
       if (state.readingMode === 'page') {
