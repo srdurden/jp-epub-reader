@@ -309,8 +309,9 @@
       margin-left: 4px;
     }
     .reader-font-stepper {
-      display: inline-flex;
-      width: max-content;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: 8.2rem;
       justify-self: start;
       border-radius: 999px;
       overflow: hidden;
@@ -320,12 +321,13 @@
     .reader-font-stepper button {
       border: 0;
       border-radius: 0;
-      min-height: 0;
-      padding: 4px 6px;
+      min-height: 4rem;
+      padding: 0 0 0.45rem;
       background: transparent;
       color: var(--text);
-      display: grid;
-      place-items: center;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
       font-weight: 700;
       line-height: 1;
       cursor: pointer;
@@ -349,7 +351,7 @@
       font-size: 0.85rem;
     }
     .reader-font-stepper .font-size-large {
-      font-size: 2.55rem;
+      font-size: 2rem;
     }
     .reader-menu-divider {
       height: 1px;
