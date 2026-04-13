@@ -319,7 +319,7 @@
     .reader-font-stepper button {
       border: 0;
       border-radius: 0;
-      min-height: 42px;
+      min-height: 58px;
       background: transparent;
       color: var(--text);
       display: grid;
@@ -344,10 +344,10 @@
       cursor: not-allowed;
     }
     .reader-font-stepper .font-size-small {
-      font-size: 1.65rem;
+      font-size: 2rem;
     }
     .reader-font-stepper .font-size-large {
-      font-size: 2rem;
+      font-size: 2.5rem;
     }
     .reader-menu-divider {
       height: 1px;
@@ -2091,7 +2091,6 @@
           const db = req.result;
           if (!db.objectStoreNames.contains(STORES.books)) db.createObjectStore(STORES.books, { keyPath: 'id' });
           if (!db.objectStoreNames.contains(STORES.bookFiles)) db.createObjectStore(STORES.bookFiles, { keyPath: 'bookId' });
-          if (!db.objectStoreNames.contains(STORES.bookParsedCache)) db.createObjectStore(STORES.bookParsedCache, { keyPath: 'bookId' });
           if (!db.objectStoreNames.contains(STORES.progress)) db.createObjectStore(STORES.progress, { keyPath: 'bookId' });
           if (!db.objectStoreNames.contains(STORES.settings)) db.createObjectStore(STORES.settings, { keyPath: 'id' });
           if (!db.objectStoreNames.contains(STORES.vocabEntries)) {
@@ -2131,6 +2130,10 @@
             const sentenceOverridesStore = db.createObjectStore(STORES.sentenceOverrides, { keyPath: 'id' });
             sentenceOverridesStore.createIndex('bookId', 'bookId', { unique: false });
             sentenceOverridesStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(STORES.bookParsedCache)) {
+            const parsedCacheStore = db.createObjectStore(STORES.bookParsedCache, { keyPath: 'bookId' });
+            parsedCacheStore.createIndex('updatedAt', 'updatedAt', { unique: false });
           }
           const sentenceOverridesStore = req.transaction.objectStore(STORES.sentenceOverrides);
           if (!sentenceOverridesStore.indexNames.contains('bookId')) sentenceOverridesStore.createIndex('bookId', 'bookId', { unique: false });
@@ -2230,30 +2233,54 @@
       });
     }
 
+    async function saveBook(book, fileBlob) {
+      await dbPut(STORES.books, book);
+      await dbPut(STORES.bookFiles, { bookId: book.id, epubBlob: fileBlob });
+    }
+
+    async function loadBookBlob(bookId) {
+      const rec = await dbGet(STORES.bookFiles, bookId);
+      return rec?.epubBlob || null;
+    }
+
     function isParsedBookCacheValid(cache) {
-      if (!cache || typeof cache !== 'object') return false;
-      if (cache.parseVersion !== EPUB_PARSE_CACHE_VERSION) return false;
-      if (!Array.isArray(cache.sections) || !cache.sections.length) return false;
-      return cache.sections.every((section) => (
-        section
-        && typeof section === 'object'
-        && Number.isInteger(section.index)
-        && typeof section.path === 'string'
-        && typeof section.title === 'string'
-        && typeof section.html === 'string'
-      ));
+      return Boolean(
+        cache
+        && cache.bookId
+        && cache.parseVersion === EPUB_PARSE_CACHE_VERSION
+        && Array.isArray(cache.sections)
+        && cache.sections.length
+      );
+    }
+
+    function getSectionSentenceCount(section) {
+      if (!section) return 0;
+      if (Number.isInteger(section.sentenceCount) && section.sentenceCount >= 0) return section.sentenceCount;
+      return getSentencesForSection(section).length;
+    }
+
+    function buildParsedSectionsCachePayload(bookId, parsed) {
+      const sections = (parsed?.sections || []).map((section) => ({
+        index: section.index,
+        path: section.path,
+        title: section.title,
+        html: section.html,
+        sentenceCount: getSentencesForSection(section).length
+      }));
+      return {
+        bookId,
+        parseVersion: EPUB_PARSE_CACHE_VERSION,
+        parsedTitle: parsed?.title || 'Sin título',
+        parsedAuthor: parsed?.author || 'Autor desconocido',
+        sections,
+        updatedAt: new Date().toISOString()
+      };
     }
 
     async function saveParsedBookCache(bookId, parsed) {
-      if (!bookId || !parsed) return;
-      await dbPut(STORES.bookParsedCache, {
-        bookId,
-        parseVersion: EPUB_PARSE_CACHE_VERSION,
-        parsedTitle: parsed.title || '',
-        parsedAuthor: parsed.author || '',
-        sections: parsed.sections,
-        updatedAt: new Date().toISOString()
-      });
+      const payload = buildParsedSectionsCachePayload(bookId, parsed);
+      await dbPut(STORES.bookParsedCache, payload);
+      return payload;
     }
 
     async function loadParsedBookCache(bookId) {
@@ -2269,39 +2296,29 @@
       const cached = await loadParsedBookCache(bookId);
       if (cached) {
         return {
-          title: cached.parsedTitle || '',
-          author: cached.parsedAuthor || '',
-          sections: cached.sections
+          title: cached.parsedTitle || 'Sin título',
+          author: cached.parsedAuthor || 'Autor desconocido',
+          sections: cached.sections || []
         };
       }
-
-      const targetBlob = blob || await loadBookBlob(bookId);
-      if (!targetBlob) return null;
-      const epubMap = await unzipEpub(await targetBlob.arrayBuffer());
+      const sourceBlob = blob || await loadBookBlob(bookId);
+      if (!sourceBlob) return null;
+      const epubMap = await unzipEpub(await sourceBlob.arrayBuffer());
       const parsed = await extractReadableSections(epubMap);
-      if (!Array.isArray(parsed.sections) || !parsed.sections.length) return parsed;
-      await saveParsedBookCache(bookId, parsed);
-      return parsed;
-    }
-
-    async function saveBook(book, fileBlob, parsed = null) {
-      await dbPut(STORES.books, book);
-      await dbPut(STORES.bookFiles, { bookId: book.id, epubBlob: fileBlob });
-      if (parsed && Array.isArray(parsed.sections) && parsed.sections.length) {
-        await saveParsedBookCache(book.id, parsed);
-      }
-    }
-
-    async function loadBookBlob(bookId) {
-      const rec = await dbGet(STORES.bookFiles, bookId);
-      return rec?.epubBlob || null;
+      if (!parsed.sections.length) return parsed;
+      const cachePayload = await saveParsedBookCache(bookId, parsed);
+      return {
+        title: cachePayload.parsedTitle,
+        author: cachePayload.parsedAuthor,
+        sections: cachePayload.sections
+      };
     }
 
     async function deleteBook(bookId) {
       await dbDelete(STORES.books, bookId);
       await dbDelete(STORES.bookFiles, bookId);
-      await deleteParsedBookCache(bookId);
       await dbDelete(STORES.progress, bookId);
+      await deleteParsedBookCache(bookId);
       await dbDeleteWhereIndexEquals(STORES.sentenceOverrides, 'bookId', bookId);
       for (const [id, record] of [...state.sentenceOverrideMap.entries()]) {
         if (record?.bookId === bookId) state.sentenceOverrideMap.delete(id);
@@ -3072,7 +3089,8 @@
             cover: meta.coverDataUrl, sectionCount: meta.sections.length,
             createdAt: now, updatedAt: now, lastOpenedAt: null
           };
-          await saveBook(book, file, meta);
+          await saveBook(book, file);
+          await saveParsedBookCache(book.id, meta);
         } catch (err) {
           alert(`Error importando ${file.name}: ${err.message}`);
         }
@@ -4124,20 +4142,21 @@
     }
 
     function buildVirtualPageMap(sectionIndex, context = getReaderPaginationContext()) {
-      const tokenizedSentences = getTokenizedSection(state.currentBookId, sectionIndex);
-      if (!tokenizedSentences.length) {
+      const section = state.sections[Math.max(0, Number(sectionIndex) || 0)] || null;
+      const sentenceCount = getSectionSentenceCount(section);
+      if (!sentenceCount) {
         return [{ startSentence: 0, endSentence: 0 }];
       }
 
       const pages = [];
       const sentencesPerPage = 17;
-      for (let pageStart = 0; pageStart < tokenizedSentences.length; pageStart += sentencesPerPage) {
-        const endSentence = Math.min(pageStart + sentencesPerPage - 1, tokenizedSentences.length - 1);
+      for (let pageStart = 0; pageStart < sentenceCount; pageStart += sentencesPerPage) {
+        const endSentence = Math.min(pageStart + sentencesPerPage - 1, sentenceCount - 1);
         pages.push({ startSentence: pageStart, endSentence });
       }
 
       if (!pages.length) {
-        pages.push({ startSentence: 0, endSentence: tokenizedSentences.length - 1 });
+        pages.push({ startSentence: 0, endSentence: Math.max(sentenceCount - 1, 0) });
       }
       return pages;
     }
@@ -5253,11 +5272,12 @@
     async function openReader(bookId) {
       const book = state.books.find((b) => b.id === bookId);
       if (!book) return;
-      const parsed = await getParsedBookData(bookId);
-      if (!parsed) return alert('No se encontró el archivo EPUB asociado.');
-      if (!parsed.sections.length) return alert('No se encontraron secciones legibles en este EPUB.');
 
-      const progress = await loadReadingProgress(bookId);
+      const progressPromise = loadReadingProgress(bookId);
+      const parsedPromise = getParsedBookData(bookId);
+      const [progress, parsed] = await Promise.all([progressPromise, parsedPromise]);
+      if (!parsed?.sections?.length) return alert('No se encontraron secciones legibles en este EPUB.');
+
       state.currentBook = { ...book, parsedTitle: parsed.title, parsedAuthor: parsed.author };
       state.currentBookId = bookId;
       state.sections = parsed.sections;
@@ -5274,11 +5294,13 @@
       resetSentenceTranslation();
       resetSentenceEditorState();
 
-      await dbPut(STORES.books, { ...book, lastOpenedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-      await saveSettings({ lastOpenedBookId: bookId });
       state.route = 'reader';
-      await refreshBooks();
       renderReaderView({ alignToCurrentSentence: true });
+
+      const openedAt = new Date().toISOString();
+      state.books = state.books.map((candidate) => candidate.id === bookId ? { ...candidate, lastOpenedAt: openedAt, updatedAt: openedAt } : candidate);
+      dbPut(STORES.books, { ...book, lastOpenedAt: openedAt, updatedAt: openedAt }).catch(console.warn);
+      saveSettings({ lastOpenedBookId: bookId }).catch(console.warn);
     }
 
     async function persistCurrentProgress() {
@@ -6547,24 +6569,22 @@
         openReaderMenuBtn?.setAttribute('aria-expanded', 'true');
       }
 
-      const FONT_SIZE_MIN = 14;
-      const FONT_SIZE_MAX = 30;
-      const FONT_SIZE_STEP = 2;
       const applyReaderFontSize = async (nextSizeCandidate) => {
-        const nextSize = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, Number(nextSizeCandidate) || 18));
+        const nextSize = Math.max(14, Math.min(30, Number(nextSizeCandidate) || 18));
         if (nextSize === state.settings.fontSize) return;
         state.settings.fontSize = nextSize;
         state.pageMapsCache.clear();
         state.pageSummariesCache.clear();
-        renderReaderView({ alignToCurrentSentence: true, keepMenuOpen: true });
+        const menuIsOpen = !$('#readerMenu')?.classList.contains('hidden');
+        renderReaderView({ alignToCurrentSentence: true, keepMenuOpen: menuIsOpen });
         await saveSettings({ fontSize: nextSize });
         await persistCurrentProgress();
       };
       $('#fontSizeDecrease')?.addEventListener('click', () => {
-        applyReaderFontSize(state.settings.fontSize - FONT_SIZE_STEP);
+        applyReaderFontSize(state.settings.fontSize - 1);
       });
       $('#fontSizeIncrease')?.addEventListener('click', () => {
-        applyReaderFontSize(state.settings.fontSize + FONT_SIZE_STEP);
+        applyReaderFontSize(state.settings.fontSize + 1);
       });
 
       if (state.readingMode === 'page') {
