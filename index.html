@@ -1794,10 +1794,12 @@
     // Config / constantes
     // =========================
     const DB_NAME = 'jp_epub_reader_db';
-    const DB_VERSION = 5;
+    const DB_VERSION = 6;
+    const EPUB_PARSE_CACHE_VERSION = 1;
     const STORES = {
       books: 'books',
       bookFiles: 'bookFiles',
+      bookParsedCache: 'bookParsedCache',
       progress: 'progress',
       settings: 'settings',
       vocabEntries: 'vocabEntries',
@@ -1899,7 +1901,18 @@
     }
     const BACKUP_FORMAT = 'jp_epub_reader_backup';
     const BACKUP_FILE_VERSION = 1;
-    const BACKUP_STORE_NAMES = Object.freeze(Object.values(STORES));
+    const BACKUP_STORE_NAMES = Object.freeze([
+      STORES.books,
+      STORES.bookFiles,
+      STORES.progress,
+      STORES.settings,
+      STORES.vocabEntries,
+      STORES.dictionaryCache,
+      STORES.dictionaryEntries,
+      STORES.dictionaryPacks,
+      STORES.dictionaryMeta,
+      STORES.sentenceOverrides
+    ]);
 
     const state = {
       route: 'library',
@@ -2078,6 +2091,7 @@
           const db = req.result;
           if (!db.objectStoreNames.contains(STORES.books)) db.createObjectStore(STORES.books, { keyPath: 'id' });
           if (!db.objectStoreNames.contains(STORES.bookFiles)) db.createObjectStore(STORES.bookFiles, { keyPath: 'bookId' });
+          if (!db.objectStoreNames.contains(STORES.bookParsedCache)) db.createObjectStore(STORES.bookParsedCache, { keyPath: 'bookId' });
           if (!db.objectStoreNames.contains(STORES.progress)) db.createObjectStore(STORES.progress, { keyPath: 'bookId' });
           if (!db.objectStoreNames.contains(STORES.settings)) db.createObjectStore(STORES.settings, { keyPath: 'id' });
           if (!db.objectStoreNames.contains(STORES.vocabEntries)) {
@@ -2216,9 +2230,66 @@
       });
     }
 
-    async function saveBook(book, fileBlob) {
+    function isParsedBookCacheValid(cache) {
+      if (!cache || typeof cache !== 'object') return false;
+      if (cache.parseVersion !== EPUB_PARSE_CACHE_VERSION) return false;
+      if (!Array.isArray(cache.sections) || !cache.sections.length) return false;
+      return cache.sections.every((section) => (
+        section
+        && typeof section === 'object'
+        && Number.isInteger(section.index)
+        && typeof section.path === 'string'
+        && typeof section.title === 'string'
+        && typeof section.html === 'string'
+      ));
+    }
+
+    async function saveParsedBookCache(bookId, parsed) {
+      if (!bookId || !parsed) return;
+      await dbPut(STORES.bookParsedCache, {
+        bookId,
+        parseVersion: EPUB_PARSE_CACHE_VERSION,
+        parsedTitle: parsed.title || '',
+        parsedAuthor: parsed.author || '',
+        sections: parsed.sections,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    async function loadParsedBookCache(bookId) {
+      const cache = await dbGet(STORES.bookParsedCache, bookId);
+      return isParsedBookCacheValid(cache) ? cache : null;
+    }
+
+    async function deleteParsedBookCache(bookId) {
+      await dbDelete(STORES.bookParsedCache, bookId);
+    }
+
+    async function getParsedBookData(bookId, blob = null) {
+      const cached = await loadParsedBookCache(bookId);
+      if (cached) {
+        return {
+          title: cached.parsedTitle || '',
+          author: cached.parsedAuthor || '',
+          sections: cached.sections
+        };
+      }
+
+      const targetBlob = blob || await loadBookBlob(bookId);
+      if (!targetBlob) return null;
+      const epubMap = await unzipEpub(await targetBlob.arrayBuffer());
+      const parsed = await extractReadableSections(epubMap);
+      if (!Array.isArray(parsed.sections) || !parsed.sections.length) return parsed;
+      await saveParsedBookCache(bookId, parsed);
+      return parsed;
+    }
+
+    async function saveBook(book, fileBlob, parsed = null) {
       await dbPut(STORES.books, book);
       await dbPut(STORES.bookFiles, { bookId: book.id, epubBlob: fileBlob });
+      if (parsed && Array.isArray(parsed.sections) && parsed.sections.length) {
+        await saveParsedBookCache(book.id, parsed);
+      }
     }
 
     async function loadBookBlob(bookId) {
@@ -2229,6 +2300,7 @@
     async function deleteBook(bookId) {
       await dbDelete(STORES.books, bookId);
       await dbDelete(STORES.bookFiles, bookId);
+      await deleteParsedBookCache(bookId);
       await dbDelete(STORES.progress, bookId);
       await dbDeleteWhereIndexEquals(STORES.sentenceOverrides, 'bookId', bookId);
       for (const [id, record] of [...state.sentenceOverrideMap.entries()]) {
@@ -3000,7 +3072,7 @@
             cover: meta.coverDataUrl, sectionCount: meta.sections.length,
             createdAt: now, updatedAt: now, lastOpenedAt: null
           };
-          await saveBook(book, file);
+          await saveBook(book, file, meta);
         } catch (err) {
           alert(`Error importando ${file.name}: ${err.message}`);
         }
@@ -5181,11 +5253,8 @@
     async function openReader(bookId) {
       const book = state.books.find((b) => b.id === bookId);
       if (!book) return;
-      const blob = await loadBookBlob(bookId);
-      if (!blob) return alert('No se encontró el archivo EPUB asociado.');
-
-      const epubMap = await unzipEpub(await blob.arrayBuffer());
-      const parsed = await extractReadableSections(epubMap);
+      const parsed = await getParsedBookData(bookId);
+      if (!parsed) return alert('No se encontró el archivo EPUB asociado.');
       if (!parsed.sections.length) return alert('No se encontraron secciones legibles en este EPUB.');
 
       const progress = await loadReadingProgress(bookId);
