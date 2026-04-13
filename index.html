@@ -1133,9 +1133,62 @@
       display: grid;
       gap: 8px;
     }
-    .sentence-edit-panel textarea {
+    .sentence-edit-input-wrap {
+      position: relative;
+      width: 100%;
+      min-height: 96px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .sentence-edit-mirror,
+    .sentence-edit-input-wrap textarea {
+      width: 100%;
       min-height: 96px;
       margin: 0;
+      padding: 8px 10px;
+      font: inherit;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      tab-size: 4;
+    }
+    .sentence-edit-mirror {
+      position: absolute;
+      inset: 0;
+      color: var(--text);
+      pointer-events: none;
+      z-index: 1;
+      overflow: hidden;
+    }
+    .sentence-edit-input-wrap textarea {
+      position: relative;
+      z-index: 2;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: transparent;
+      caret-color: var(--text);
+      resize: vertical;
+    }
+    .sentence-edit-input-wrap textarea::selection {
+      background: color-mix(in srgb, var(--primary) 28%, transparent);
+    }
+    .sentence-edit-char {
+      color: var(--text);
+    }
+    .sentence-edit-space {
+      display: inline-block;
+      min-width: 0.42em;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--muted) 22%, var(--surface-soft) 78%);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 18%, transparent);
+    }
+    [data-theme="dark"] .sentence-edit-space {
+      background: color-mix(in srgb, var(--muted) 34%, var(--surface-soft) 66%);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 26%, transparent);
     }
     .sentence-edit-help {
       margin: 0;
@@ -1887,6 +1940,25 @@
     function formatDate(iso) {
       if (!iso) return '—';
       try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    }
+
+    function renderSentenceEditMirrorHtml(text = '') {
+      return Array.from(text).map((char) => {
+        if (char === '\n') return '<br>';
+        if (char === ' ') return '<span class="sentence-edit-space">&nbsp;</span>';
+        if (char === '\t') return '<span class="sentence-edit-space">&nbsp;&nbsp;&nbsp;&nbsp;</span>';
+        return `<span class="sentence-edit-char">${escapeHtml(char)}</span>`;
+      }).join('');
+    }
+
+    function syncSentenceEditMirror() {
+      const textarea = $('#sentenceEditInput');
+      const mirror = $('#sentenceEditMirror');
+      if (!textarea || !mirror) return;
+      mirror.innerHTML = renderSentenceEditMirrorHtml(textarea.value || '');
+      mirror.scrollTop = textarea.scrollTop;
+      mirror.scrollLeft = textarea.scrollLeft;
+      mirror.style.height = `${textarea.clientHeight}px`;
     }
 
     function uuid() {
@@ -6059,7 +6131,10 @@
       const editButtonHtml = options.preview ? '' : `<button id="openSentenceEditorBtn" class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-label="Editar divisiones de la frase">[EDIT]</button>`;
       const editorPanelHtml = options.preview || !editorOpen ? '' : `
           <div class="sentence-edit-panel">
-            <textarea id="sentenceEditInput" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off">${escapeHtml(state.sentenceEditor.draft || '')}</textarea>
+            <div class="sentence-edit-input-wrap">
+              <div id="sentenceEditMirror" class="sentence-edit-mirror" aria-hidden="true">${renderSentenceEditMirrorHtml(state.sentenceEditor.draft || '')}</div>
+              <textarea id="sentenceEditInput" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off">${escapeHtml(state.sentenceEditor.draft || '')}</textarea>
+            </div>
             <p class="sentence-edit-help">Edita la frase usando espacios para separar o juntar bloques. Solo se permiten cambios de espacios, no de caracteres.</p>
             ${state.sentenceEditor.error ? `<p class="sentence-edit-error">${escapeHtml(state.sentenceEditor.error)}</p>` : ''}
             <div class="sentence-edit-actions">
@@ -6431,6 +6506,7 @@
           state.sentenceEditor.error = '';
           if (textarea) {
             textarea.value = nextDraft;
+            syncSentenceEditMirror();
             textarea.focus();
             textarea.setSelectionRange(textarea.value.length, textarea.value.length);
           }
@@ -6460,6 +6536,10 @@
         $('#sentenceEditInput')?.addEventListener('input', (e) => {
           state.sentenceEditor.draft = e.target.value || '';
           state.sentenceEditor.error = '';
+          syncSentenceEditMirror();
+        });
+        $('#sentenceEditInput')?.addEventListener('scroll', () => {
+          syncSentenceEditMirror();
         });
         $('#sentenceEditInput')?.addEventListener('keydown', async (e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -6471,6 +6551,7 @@
           requestAnimationFrame(() => {
             const sentenceEditInput = $('#sentenceEditInput');
             if (!sentenceEditInput) return;
+            syncSentenceEditMirror();
             sentenceEditInput.focus();
             sentenceEditInput.setSelectionRange(sentenceEditInput.value.length, sentenceEditInput.value.length);
           });
