@@ -2733,11 +2733,13 @@
     }
 
     function renderSentenceTranslationResult(location, sourceText, options = {}) {
-      if (options.preview) return '';
       const view = getSentenceTranslationViewModel(location, sourceText);
       const meta = getSentenceTranslationButtonMeta(view);
+      const idAttr = options.preview ? '' : ' id="translateSentenceBtn"';
+      const inertAttrs = options.preview ? ' aria-hidden="true" tabindex="-1"' : '';
+      const disabledAttr = meta.disabled || options.preview ? 'disabled' : '';
       return `
-        <button id="translateSentenceBtn" class="sentence-translate-btn is-${view.kind}" type="button" aria-busy="${view.kind === 'loading' ? 'true' : 'false'}" aria-label="${escapeHtml(meta.ariaLabel)}" title="${escapeHtml(meta.title)}" ${meta.disabled ? 'disabled' : ''}>
+        <button${idAttr} class="sentence-translate-btn is-${view.kind}${options.preview ? ' is-preview' : ''}" type="button" aria-busy="${view.kind === 'loading' ? 'true' : 'false'}" aria-label="${escapeHtml(meta.ariaLabel)}" title="${escapeHtml(meta.title)}" ${disabledAttr}${inertAttrs}>
           ${buildSentenceTranslationMarkup(view)}
         </button>
       `;
@@ -6156,9 +6158,11 @@
       const copySentenceAttrs = options.preview
         ? 'class="copy-glyph-btn" title="Copiar frase" aria-hidden="true" tabindex="-1"'
         : 'id="copySentenceBtn" class="copy-glyph-btn" title="Copiar frase" aria-label="Copiar frase"';
-      const manualOverrideRecord = options.preview ? null : getSentenceOverrideRecord(state.currentBookId, safeLocation.sectionIndex, idx, sentence);
+      const manualOverrideRecord = getSentenceOverrideRecord(state.currentBookId, safeLocation.sectionIndex, idx, sentence);
       const editorOpen = !options.preview && isSentenceEditorOpen({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx });
-      const editButtonHtml = options.preview ? '' : `<button id="openSentenceEditorBtn" class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-label="Editar divisiones de la frase">[EDIT]</button>`;
+      const editButtonHtml = options.preview
+        ? `<button class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-hidden="true" tabindex="-1">[EDIT]</button>`
+        : `<button id="openSentenceEditorBtn" class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-label="Editar divisiones de la frase">[EDIT]</button>`;
       const editorPanelHtml = options.preview || !editorOpen ? '' : `
           <div class="sentence-edit-panel">
             <div class="sentence-edit-input-wrap">
