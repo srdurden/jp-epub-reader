@@ -754,6 +754,17 @@
       border-color: transparent;
     }
     .level-btn { min-width: 42px; padding: 6px 10px; border-radius: 999px; }
+    .token-remove-btn {
+      min-width: 34px;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1;
+    }
     .level-btn.active { background: var(--primary); color: #fff; border-color: transparent; }
     .level-btn.level-checkmark {
       color: #16a34a;
@@ -4363,7 +4374,7 @@
         <aside class="token-panel" role="dialog" aria-label="Detalle de token enriquecido">
           <div class="token-panel-top-row">
             <div class="left-actions">
-              <button class="level-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">🗑</button>
+              <button class="level-btn danger token-remove-btn" id="removeVocabEntryBtn" title="Sacar del vocabulario">✕</button>
             </div>
             <div class="level-picker" aria-label="Nivel de conocimiento">
               ${[1,2,3].map((lvl) => `<button class="level-btn ${lvl === 3 ? 'level-checkmark' : ''} ${(Number(draftLevel) >= lvl) ? 'active' : ''}" data-level="${lvl}">${lvl === 3 ? '✓' : lvl}</button>`).join('')}
