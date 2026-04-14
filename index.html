@@ -1163,6 +1163,14 @@
       display: inline-block;
       vertical-align: baseline;
     }
+    .sentence-inline-space-marker {
+      margin: 0 0.08em;
+      min-height: 1.02em;
+      transform: translateY(0.04em);
+    }
+    .sentence-inline.with-space-markers {
+      line-height: inherit;
+    }
     .sentence-copy-text {
       display: inline;
       line-height: 1.45;
@@ -2052,11 +2060,71 @@
       return html;
     }
 
+    function buildSentenceEditorLiveRenderState(location, draft = '') {
+      const safeLocation = getNormalizedReaderLocation(location);
+      const section = state.sections[safeLocation.sectionIndex] || {};
+      const sentences = getSentencesForSection(section);
+      const sentence = sentences[safeLocation.sentenceIndex] || '';
+      const normalizedDraft = normalizeSentenceOverrideText(draft);
+      if (!sentence) {
+        return {
+          sentence: '',
+          tokens: [],
+          tokenizationMode: 'empty',
+          showSpaceMarkers: false,
+          rawDraft: normalizedDraft || ''
+        };
+      }
+      if (normalizedDraft) {
+        const manualTokens = buildManualSentenceTokens(sentence, normalizedDraft, {
+          bookId: state.currentBookId,
+          sectionIndex: safeLocation.sectionIndex,
+          sentenceIndex: safeLocation.sentenceIndex
+        });
+        if (manualTokens.length) {
+          return {
+            sentence,
+            tokens: manualTokens,
+            tokenizationMode: 'manual-draft',
+            showSpaceMarkers: true,
+            rawDraft: normalizedDraft
+          };
+        }
+        return {
+          sentence,
+          tokens: [],
+          tokenizationMode: 'manual-draft-invalid',
+          showSpaceMarkers: false,
+          rawDraft: normalizedDraft
+        };
+      }
+      return {
+        ...getTokenizedSentence(state.currentBookId, safeLocation.sectionIndex, safeLocation.sentenceIndex),
+        showSpaceMarkers: false,
+        rawDraft: ''
+      };
+    }
+
+    function renderSentenceEditorLiveHtml(location, draft = '') {
+      const renderState = buildSentenceEditorLiveRenderState(location, draft);
+      if (renderState?.tokens?.length) {
+        return renderSentenceTokens(renderState.tokens, {
+          inline: true,
+          segmented: state.settings.showSegmentation,
+          spaceMarkers: Boolean(renderState.showSpaceMarkers)
+        });
+      }
+      return renderSentenceEditMirrorHtml(renderState.rawDraft || renderState.sentence || '');
+    }
+
     function syncSentenceEditPreview() {
       const textarea = $('#sentenceEditInput');
-      const preview = $('#sentenceEditPreview');
-      if (!textarea || !preview) return;
-      preview.innerHTML = renderSentenceEditMirrorHtml(textarea.value || '');
+      const sentenceMirror = $('#sentenceDisplayText');
+      if (!textarea || !sentenceMirror) return;
+      sentenceMirror.innerHTML = renderSentenceEditorLiveHtml({
+        sectionIndex: state.currentSpineIndex,
+        sentenceIndex: state.currentSentenceIndex
+      }, textarea.value || '');
     }
 
     function uuid() {
@@ -4343,10 +4411,15 @@
     }
 
     function renderSentenceTokens(tokens, options = {}) {
-      const { segmented = false, inline = false } = options;
-      const tokensHtml = tokens.map((token) => `<span ${renderTokenWithKnowledgeState(token)}>${escapeHtml(token.surface)}</span>`).join('');
+      const { segmented = false, inline = false, spaceMarkers = false } = options;
+      const separatorHtml = spaceMarkers
+        ? '<span class="sentence-edit-space sentence-inline-space-marker" aria-hidden="true">&nbsp;</span>'
+        : '';
+      const tokensHtml = tokens
+        .map((token) => `<span ${renderTokenWithKnowledgeState(token)}>${escapeHtml(token.surface)}</span>`)
+        .join(separatorHtml);
       if (inline) {
-        return `<span class="sentence-inline ${segmented ? '' : 'compact'}">${tokensHtml}</span>`;
+        return `<span class="sentence-inline ${segmented ? '' : 'compact'} ${spaceMarkers ? 'with-space-markers' : ''}">${tokensHtml}</span>`;
       }
       return `<div class="segmented-line ${segmented ? '' : 'compact'}">${tokensHtml}</div>`;
     }
@@ -6283,13 +6356,23 @@
       const section = state.sections[safeLocation.sectionIndex] || {};
       const sentences = getSentencesForSection(section);
       const idx = Math.max(0, Math.min(safeLocation.sentenceIndex, Math.max(0, sentences.length - 1)));
+      const manualOverrideRecord = getSentenceOverrideRecord(state.currentBookId, safeLocation.sectionIndex, idx, sentences[idx] || '');
+      const editorOpen = !options.preview && isSentenceEditorOpen({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx });
       const tokenized = shouldTokenizeCurrentView()
-        ? getTokenizedSentence(state.currentBookId, safeLocation.sectionIndex, idx)
-        : { sentence: sentences[idx] || '', tokens: [] };
+        ? (editorOpen
+            ? buildSentenceEditorLiveRenderState({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx }, state.sentenceEditor.draft || '')
+            : getTokenizedSentence(state.currentBookId, safeLocation.sectionIndex, idx))
+        : { sentence: sentences[idx] || '', tokens: [], showSpaceMarkers: false, rawDraft: '' };
       const sentence = tokenized.sentence || 'Sin texto legible en esta sección.';
       const sentenceHtml = tokenized.tokens.length
-        ? renderSegmentedSentence(tokenized, { segmented: state.settings.showSegmentation, inline: true })
-        : escapeHtml(sentence);
+        ? renderSentenceTokens(tokenized.tokens, {
+            segmented: state.settings.showSegmentation,
+            inline: true,
+            spaceMarkers: Boolean(editorOpen && tokenized.showSpaceMarkers)
+          })
+        : (editorOpen
+            ? renderSentenceEditMirrorHtml(state.sentenceEditor.draft || sentence)
+            : escapeHtml(sentence));
       const wrapperClass = options.preview ? 'reader-preview-content' : 'reader-content';
       const playButtonAttrs = options.preview
         ? 'class="play-main" title="Reproducir oración" aria-hidden="true" tabindex="-1"'
@@ -6304,8 +6387,6 @@
       const copySentenceAttrs = options.preview
         ? 'class="copy-glyph-btn" title="Copiar frase" aria-hidden="true" tabindex="-1"'
         : 'id="copySentenceBtn" class="copy-glyph-btn" title="Copiar frase" aria-label="Copiar frase"';
-      const manualOverrideRecord = getSentenceOverrideRecord(state.currentBookId, safeLocation.sectionIndex, idx, sentence);
-      const editorOpen = !options.preview && isSentenceEditorOpen({ sectionIndex: safeLocation.sectionIndex, sentenceIndex: idx });
       const editButtonHtml = options.preview
         ? `<button class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-hidden="true" tabindex="-1">[EDIT]</button>`
         : `<button id="openSentenceEditorBtn" class="sentence-edit-link ${manualOverrideRecord ? 'has-manual-override' : ''}" type="button" aria-label="Editar divisiones de la frase">[EDIT]</button>`;
@@ -6314,8 +6395,6 @@
             <div class="sentence-edit-input-wrap">
               <textarea id="sentenceEditInput" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off">${escapeHtml(state.sentenceEditor.draft || '')}</textarea>
             </div>
-            <p class="sentence-edit-preview-label" aria-hidden="true">Espacios marcados</p>
-            <div id="sentenceEditPreview" class="sentence-edit-visual-preview" aria-hidden="true">${renderSentenceEditMirrorHtml(state.sentenceEditor.draft || '')}</div>
             ${state.sentenceEditor.error ? `<p class="sentence-edit-error">${escapeHtml(state.sentenceEditor.error)}</p>` : ''}
             <div class="sentence-edit-actions">
               <button id="saveSentenceEditBtn" class="primary" type="button">Guardar</button>
@@ -6334,7 +6413,7 @@
             <span class="sentence-copy-wrap">
               <button ${copySentenceAttrs}>⧉</button>
               <span class="sentence-copy-content">
-                <span class="sentence-copy-line"><span class="sentence-copy-text">${sentenceHtml}</span>${editButtonHtml}</span>
+                <span class="sentence-copy-line"><span ${options.preview ? 'class="sentence-copy-text"' : 'id="sentenceDisplayText" class="sentence-copy-text"'}>${sentenceHtml}</span>${editButtonHtml}</span>
                 ${editorPanelHtml}
               </span>
             </span>
