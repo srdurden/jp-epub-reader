@@ -6855,6 +6855,11 @@
       const minHorizontalDelta = 42;
       const maxVerticalDelta = 86;
       const quickSwipeMs = 260;
+      const minIntentDistance = 10;
+      const horizontalIntentDistance = state.readingMode === 'page' ? 14 : 10;
+      const verticalIntentDistance = state.readingMode === 'page' ? 18 : 14;
+      const horizontalIntentRatio = state.readingMode === 'page' ? 1.12 : 1;
+      const verticalIntentRatio = state.readingMode === 'page' ? 1.35 : 1.15;
       const stateGesture = {
         pointerId: null,
         x: 0,
@@ -6864,7 +6869,8 @@
         t: 0,
         active: false,
         dragging: false,
-        committing: false
+        committing: false,
+        intent: null
       };
 
       const isInteractiveTarget = (target) => {
@@ -6900,6 +6906,7 @@
         stateGesture.pointerId = null;
         stateGesture.active = false;
         stateGesture.dragging = false;
+        stateGesture.intent = null;
         swipeSurface.classList.remove('is-dragging');
       };
 
@@ -6947,23 +6954,39 @@
         stateGesture.t = Date.now();
         stateGesture.active = true;
         stateGesture.dragging = false;
-        resetTrackPosition({ immediate: true });
+        stateGesture.intent = null;
+        resetTrackPosition({ immediate: false });
       };
 
       const onPointerMove = (event) => {
         if (!stateGesture.active || event.pointerId !== stateGesture.pointerId || stateGesture.committing) return;
         const dx = event.clientX - stateGesture.x;
         const dy = event.clientY - stateGesture.y;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
         stateGesture.lastX = event.clientX;
         stateGesture.lastY = event.clientY;
 
-        if (!stateGesture.dragging) {
-          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-          if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) {
+        if (!stateGesture.intent) {
+          if (absDx < minIntentDistance && absDy < minIntentDistance) return;
+
+          const horizontalIntent = absDx >= horizontalIntentDistance && absDx >= absDy * horizontalIntentRatio;
+          const verticalIntent = absDy >= verticalIntentDistance && absDy >= absDx * verticalIntentRatio;
+
+          if (horizontalIntent) {
+            stateGesture.intent = 'horizontal';
+          } else if (verticalIntent) {
             finishGesture();
             resetTrackPosition({ immediate: false });
             return;
+          } else {
+            return;
           }
+        }
+
+        if (stateGesture.intent !== 'horizontal') return;
+
+        if (!stateGesture.dragging) {
           stateGesture.dragging = true;
           try { swipeSurface.setPointerCapture(event.pointerId); } catch (err) {}
         }
@@ -6979,16 +7002,23 @@
 
       const onPointerEnd = async (event) => {
         if (!stateGesture.active || event.pointerId !== stateGesture.pointerId || stateGesture.committing) return;
-        const elapsed = Date.now() - stateGesture.t;
+        const elapsed = Math.max(Date.now() - stateGesture.t, 1);
         const dx = (event.clientX || stateGesture.lastX) - stateGesture.x;
         const dy = (event.clientY || stateGesture.lastY) - stateGesture.y;
-        const shouldCommit = Math.abs(dx) >= Math.max(minHorizontalDelta, getPanelWidth() * 0.16) || (elapsed <= quickSwipeMs && Math.abs(dx) >= 28);
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const velocityX = absDx / elapsed;
+        const shouldCommit =
+          absDx >= Math.max(minHorizontalDelta, getPanelWidth() * 0.16) ||
+          (elapsed <= quickSwipeMs && absDx >= 28) ||
+          (velocityX >= 0.42 && absDx >= 22 && absDx >= absDy * 1.1);
         const direction = dx < 0 ? -1 : 1;
         const canCommit = direction < 0 ? hasNext() : hasPrev();
+        const hadHorizontalIntent = stateGesture.intent === 'horizontal';
 
         finishGesture();
 
-        if (Math.abs(dy) > maxVerticalDelta || Math.abs(dx) < minHorizontalDelta || !shouldCommit || !canCommit) {
+        if (!hadHorizontalIntent || absDy > maxVerticalDelta || absDx < minHorizontalDelta || !shouldCommit || !canCommit) {
           resetTrackPosition({ immediate: false });
           return;
         }
