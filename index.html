@@ -6853,16 +6853,18 @@
       swipeSurface.dataset.swipeAttached = '1';
 
       const isPageMode = state.readingMode === 'page';
-      const minHorizontalDelta = isPageMode ? 34 : 42;
-      const maxVerticalDelta = isPageMode ? 104 : 86;
-      const quickSwipeMs = isPageMode ? 300 : 260;
+      const minHorizontalDelta = isPageMode ? 30 : 42;
+      const maxVerticalDelta = isPageMode ? 148 : 86;
+      const quickSwipeMs = isPageMode ? 320 : 260;
       const minIntentDistance = 10;
       const horizontalIntentDistance = isPageMode ? 12 : 10;
-      const verticalIntentDistance = isPageMode ? 20 : 14;
-      const horizontalIntentRatio = isPageMode ? 1.02 : 1;
-      const verticalIntentRatio = isPageMode ? 1.55 : 1.15;
-      const releaseHorizontalRatio = isPageMode ? 0.88 : 1.1;
-      const releaseVerticalTolerance = isPageMode ? 128 : 86;
+      const verticalIntentDistance = isPageMode ? 24 : 14;
+      const horizontalIntentRatio = isPageMode ? 0.98 : 1;
+      const verticalIntentRatio = isPageMode ? 1.9 : 1.15;
+      const releaseHorizontalRatio = isPageMode ? 0.76 : 1.1;
+      const releaseVerticalTolerance = isPageMode ? 164 : 86;
+      const softCommitDistance = isPageMode ? 24 : 30;
+      const softCommitVelocity = isPageMode ? 0.24 : 0.36;
       const stateGesture = {
         pointerId: null,
         x: 0,
@@ -6974,14 +6976,16 @@
           if (absDx < minIntentDistance && absDy < minIntentDistance) return;
 
           const decisiveHorizontal = isPageMode && (
-            (absDx >= 18 && absDx >= absDy * 0.9) ||
-            (absDx >= 26 && absDy <= 42)
+            (absDx >= 14 && absDx >= absDy * 0.82) ||
+            (absDx >= 22 && absDy <= 54)
           );
           const horizontalIntent = decisiveHorizontal || (
             absDx >= horizontalIntentDistance && absDx >= absDy * horizontalIntentRatio
           );
           const verticalIntent = !decisiveHorizontal && (
-            absDy >= verticalIntentDistance && absDy >= absDx * verticalIntentRatio
+            absDy >= verticalIntentDistance &&
+            absDy >= absDx * verticalIntentRatio &&
+            !(isPageMode && absDx >= 12)
           );
 
           if (horizontalIntent) {
@@ -7019,19 +7023,25 @@
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
         const velocityX = absDx / elapsed;
-        const commitDistance = Math.max(minHorizontalDelta, getPanelWidth() * (isPageMode ? 0.13 : 0.16));
+        const commitDistance = Math.max(minHorizontalDelta, getPanelWidth() * (isPageMode ? 0.12 : 0.16));
+        const hadHorizontalIntent = stateGesture.intent === 'horizontal';
+        const horizontalDragCommit = hadHorizontalIntent && (
+          absDx >= softCommitDistance ||
+          (velocityX >= softCommitVelocity && absDx >= 16)
+        );
         const shouldCommit =
+          horizontalDragCommit ||
           absDx >= commitDistance ||
-          (elapsed <= quickSwipeMs && absDx >= (isPageMode ? 22 : 28)) ||
-          (velocityX >= (isPageMode ? 0.32 : 0.42) && absDx >= (isPageMode ? 18 : 22) && absDx >= absDy * releaseHorizontalRatio);
+          (elapsed <= quickSwipeMs && absDx >= (isPageMode ? 20 : 28)) ||
+          (velocityX >= (isPageMode ? 0.28 : 0.42) && absDx >= (isPageMode ? 16 : 22) && absDx >= absDy * releaseHorizontalRatio);
         const direction = dx < 0 ? -1 : 1;
         const canCommit = direction < 0 ? hasNext() : hasPrev();
-        const hadHorizontalIntent = stateGesture.intent === 'horizontal';
         const releaseLooksHorizontal = absDx >= minHorizontalDelta && absDx >= absDy * releaseHorizontalRatio && absDy <= releaseVerticalTolerance;
+        const looksStronglyVertical = !hadHorizontalIntent && absDy > maxVerticalDelta && absDy > absDx * 1.35;
 
         finishGesture();
 
-        if ((!hadHorizontalIntent && !releaseLooksHorizontal) || absDy > maxVerticalDelta || absDx < minHorizontalDelta || !shouldCommit || !canCommit) {
+        if ((!hadHorizontalIntent && !releaseLooksHorizontal) || looksStronglyVertical || absDx < (hadHorizontalIntent ? 16 : minHorizontalDelta) || !shouldCommit || !canCommit) {
           resetTrackPosition({ immediate: false });
           return;
         }
