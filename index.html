@@ -6852,14 +6852,17 @@
       if (!swipeSurface || !swipeTrack || swipeSurface.dataset.swipeAttached === '1') return;
       swipeSurface.dataset.swipeAttached = '1';
 
-      const minHorizontalDelta = 42;
-      const maxVerticalDelta = 86;
-      const quickSwipeMs = 260;
+      const isPageMode = state.readingMode === 'page';
+      const minHorizontalDelta = isPageMode ? 34 : 42;
+      const maxVerticalDelta = isPageMode ? 104 : 86;
+      const quickSwipeMs = isPageMode ? 300 : 260;
       const minIntentDistance = 10;
-      const horizontalIntentDistance = state.readingMode === 'page' ? 14 : 10;
-      const verticalIntentDistance = state.readingMode === 'page' ? 18 : 14;
-      const horizontalIntentRatio = state.readingMode === 'page' ? 1.12 : 1;
-      const verticalIntentRatio = state.readingMode === 'page' ? 1.35 : 1.15;
+      const horizontalIntentDistance = isPageMode ? 12 : 10;
+      const verticalIntentDistance = isPageMode ? 20 : 14;
+      const horizontalIntentRatio = isPageMode ? 1.02 : 1;
+      const verticalIntentRatio = isPageMode ? 1.55 : 1.15;
+      const releaseHorizontalRatio = isPageMode ? 0.88 : 1.1;
+      const releaseVerticalTolerance = isPageMode ? 128 : 86;
       const stateGesture = {
         pointerId: null,
         x: 0,
@@ -6970,8 +6973,16 @@
         if (!stateGesture.intent) {
           if (absDx < minIntentDistance && absDy < minIntentDistance) return;
 
-          const horizontalIntent = absDx >= horizontalIntentDistance && absDx >= absDy * horizontalIntentRatio;
-          const verticalIntent = absDy >= verticalIntentDistance && absDy >= absDx * verticalIntentRatio;
+          const decisiveHorizontal = isPageMode && (
+            (absDx >= 18 && absDx >= absDy * 0.9) ||
+            (absDx >= 26 && absDy <= 42)
+          );
+          const horizontalIntent = decisiveHorizontal || (
+            absDx >= horizontalIntentDistance && absDx >= absDy * horizontalIntentRatio
+          );
+          const verticalIntent = !decisiveHorizontal && (
+            absDy >= verticalIntentDistance && absDy >= absDx * verticalIntentRatio
+          );
 
           if (horizontalIntent) {
             stateGesture.intent = 'horizontal';
@@ -7008,17 +7019,19 @@
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
         const velocityX = absDx / elapsed;
+        const commitDistance = Math.max(minHorizontalDelta, getPanelWidth() * (isPageMode ? 0.13 : 0.16));
         const shouldCommit =
-          absDx >= Math.max(minHorizontalDelta, getPanelWidth() * 0.16) ||
-          (elapsed <= quickSwipeMs && absDx >= 28) ||
-          (velocityX >= 0.42 && absDx >= 22 && absDx >= absDy * 1.1);
+          absDx >= commitDistance ||
+          (elapsed <= quickSwipeMs && absDx >= (isPageMode ? 22 : 28)) ||
+          (velocityX >= (isPageMode ? 0.32 : 0.42) && absDx >= (isPageMode ? 18 : 22) && absDx >= absDy * releaseHorizontalRatio);
         const direction = dx < 0 ? -1 : 1;
         const canCommit = direction < 0 ? hasNext() : hasPrev();
         const hadHorizontalIntent = stateGesture.intent === 'horizontal';
+        const releaseLooksHorizontal = absDx >= minHorizontalDelta && absDx >= absDy * releaseHorizontalRatio && absDy <= releaseVerticalTolerance;
 
         finishGesture();
 
-        if (!hadHorizontalIntent || absDy > maxVerticalDelta || absDx < minHorizontalDelta || !shouldCommit || !canCommit) {
+        if ((!hadHorizontalIntent && !releaseLooksHorizontal) || absDy > maxVerticalDelta || absDx < minHorizontalDelta || !shouldCommit || !canCommit) {
           resetTrackPosition({ immediate: false });
           return;
         }
