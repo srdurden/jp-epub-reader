@@ -4750,6 +4750,7 @@
           input.value = geminiText;
           state.tokenSelection.userDefinitionDraft = geminiText;
           input.dispatchEvent(new Event('input', { bubbles: true }));
+          void persistUserDefinitionInBackground(entry.vocabKey, geminiText);
           input.focus();
           input.setSelectionRange(input.value.length, input.value.length);
         } catch (err) {
@@ -5387,6 +5388,27 @@
       state.vocabMap.set(next.vocabKey, next);
       touchVocabularyData();
       return next;
+    }
+
+    async function persistUserDefinitionInBackground(vocabKey, text) {
+      if (!vocabKey) return null;
+      const trimmedText = (text || '').trim();
+      try {
+        let updated = await updateUserDefinition(vocabKey, text);
+        if (!updated) return null;
+        if (trimmedText && getEffectiveFamiliarityLevel(updated.familiarityLevel) == null) {
+          updated = await setTokenFamiliarity(vocabKey, 1) || updated;
+          applyFamiliarityStyles(vocabKey, updated.familiarityLevel);
+        }
+        if (state.tokenSelection?.entry?.vocabKey === vocabKey) {
+          state.tokenSelection.entry = updated;
+          state.tokenSelection.draftLevel = updated.familiarityLevel;
+        }
+        return updated;
+      } catch (err) {
+        console.warn('No se pudo persistir la definición en segundo plano.', err);
+        return null;
+      }
     }
 
     function renderMeaningsList(meanings) {
