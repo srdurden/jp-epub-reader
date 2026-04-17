@@ -5831,9 +5831,9 @@
                     <button id="saveTranslationsConfigBtn" class="library-action-btn" type="button">Guardar</button>
                     <button id="clearTranslationsConfigBtn" class="library-action-btn" type="button">Borrar</button>
                   </div>
+                  <p class="status library-status">${escapeHtml(state.translationConfigStatus || (isTranslationsConfigured ? 'Configuración de Azure Translator lista.' : 'Añade tu clave y tu región para traducir oraciones en modo frase.'))}</p>
                 </div>
               </details>
-              <p class="status library-status">${escapeHtml(state.translationConfigStatus || (isTranslationsConfigured ? 'Configuración de Azure Translator lista.' : 'Añade tu clave y tu región para traducir oraciones en modo frase.'))}</p>
               <details class="settings-collapsible">
                 <summary>
                   <span>Gemini</span>
@@ -5852,6 +5852,7 @@
                     <button id="saveGeminiConfigBtn" class="library-action-btn" type="button">Guardar</button>
                     <button id="clearGeminiConfigBtn" class="library-action-btn" type="button">Borrar</button>
                   </div>
+                  <p class="status library-status">${escapeHtml(state.geminiConfigStatus || (isGeminiConfigured ? 'Configuración de Gemini lista.' : 'Añade tu clave API y revisa el modelo y el prompt por defecto.'))}</p>
                 </div>
               </details>
               <details class="settings-collapsible">
@@ -5881,7 +5882,6 @@
                 ${state.dictionaryStatus.importMessage ? `<p class="status library-status">${escapeHtml(state.dictionaryStatus.importMessage)}</p>` : ''}
               </div>
             </div>
-            <p class="status library-status">${escapeHtml(state.geminiConfigStatus || (isGeminiConfigured ? 'Configuración de Gemini lista.' : 'Añade tu clave API y revisa el modelo y el prompt por defecto.'))}</p>
           </div>
           ${state.advancedSettingsUi.isOpen ? `
             <div class="library-modal-backdrop" data-close-advanced-modal="1" aria-hidden="true"></div>
