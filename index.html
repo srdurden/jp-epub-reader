@@ -949,11 +949,20 @@
     }
     .reader-footer-bar {
       flex: 0 0 auto;
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: end;
       padding: 4px 0 2px;
       min-height: 42px;
+      gap: 8px;
+    }
+    .reader-footer-page {
+      justify-self: start;
+      align-self: center;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      white-space: nowrap;
     }
     .reader-mode-toggle {
       width: 56px;
@@ -6539,7 +6548,9 @@
             ${renderReaderCarousel(initialContext)}
           </div>
           <div class="reader-footer-bar">
+            <div class="reader-footer-page" id="readerFooterPageInfo">Pág ${pageInfo.globalPageCurrent}/${pageInfo.globalPageTotal}</div>
             <button id="toggleModeBtn" class="reader-mode-toggle" title="Cambiar entre modo frase y modo página" aria-label="Cambiar entre modo frase y modo página">⇄</button>
+            <div aria-hidden="true"></div>
           </div>
         </div>
         <div id="tokenPanelHost"></div>
