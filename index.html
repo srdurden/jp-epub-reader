@@ -660,6 +660,39 @@
     .reader-level-preview .token {
       padding-inline: 0.32em;
     }
+    .settings-collapsible {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--surface-soft) 65%, transparent);
+      overflow: hidden;
+    }
+    .settings-collapsible summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      font-weight: 700;
+      user-select: none;
+    }
+    .settings-collapsible summary::-webkit-details-marker { display: none; }
+    .settings-collapsible summary .chevron {
+      color: var(--muted);
+      transition: transform 140ms ease;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+    .settings-collapsible[open] summary .chevron {
+      transform: rotate(180deg);
+    }
+    .settings-collapsible-body {
+      border-top: 1px solid var(--border);
+      padding: 0 14px 14px;
+      display: grid;
+      gap: 10px;
+    }
     .reader-content.with-panel { position: relative; }
     #tokenPanelHost {
       position: fixed;
@@ -5782,48 +5815,59 @@
               <span class="library-title">Configuración</span>
             </h1>
             <div class="library-toolbar">
-              <div class="reader-menu-section">
-                <h2 style="margin:0;">Traducciones</h2>
-                <label for="azureTranslateKeyInput"><strong>Clave de Azure Translator</strong></label>
-                <input id="azureTranslateKeyInput" type="password" value="${escapeHtml(keyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
-                <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
-                <label for="azureTranslateRegionInput"><strong>Región</strong></label>
-                <input id="azureTranslateRegionInput" type="text" value="${escapeHtml(regionValue)}" placeholder="Ejemplo: westeurope" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
-                <div class="field-help">Endpoint fijo: ${escapeHtml(AZURE_TRANSLATOR_ENDPOINT)}/</div>
-                <div class="library-actions-row">
-                  <button id="saveTranslationsConfigBtn" class="library-action-btn" type="button">Guardar</button>
-                  <button id="clearTranslationsConfigBtn" class="library-action-btn" type="button">Borrar</button>
+              <details class="settings-collapsible">
+                <summary>
+                  <span>Traducciones</span>
+                  <span class="chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="settings-collapsible-body">
+                  <label for="azureTranslateKeyInput"><strong>Clave de Azure Translator</strong></label>
+                  <input id="azureTranslateKeyInput" type="password" value="${escapeHtml(keyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                  <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
+                  <label for="azureTranslateRegionInput"><strong>Región</strong></label>
+                  <input id="azureTranslateRegionInput" type="text" value="${escapeHtml(regionValue)}" placeholder="Ejemplo: westeurope" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                  <div class="field-help">Endpoint fijo: ${escapeHtml(AZURE_TRANSLATOR_ENDPOINT)}/</div>
+                  <div class="library-actions-row">
+                    <button id="saveTranslationsConfigBtn" class="library-action-btn" type="button">Guardar</button>
+                    <button id="clearTranslationsConfigBtn" class="library-action-btn" type="button">Borrar</button>
+                  </div>
                 </div>
-                <p class="status library-status">${escapeHtml(state.translationConfigStatus || (isTranslationsConfigured ? 'Configuración de Azure Translator lista.' : 'Añade tu clave y tu región para traducir oraciones en modo frase.'))}</p>
-              </div>
-              <div class="reader-menu-section">
-                <h2 style="margin:0;">Gemini</h2>
-                <label for="geminiApiKeyInput"><strong>Clave API</strong></label>
-                <input id="geminiApiKeyInput" type="password" value="${escapeHtml(apiKeyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
-                <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
-              </div>
-              <div class="reader-menu-section">
-                <label for="geminiModelInput"><strong>Modelo</strong></label>
-                <input id="geminiModelInput" type="text" value="${escapeHtml(modelValue)}" placeholder="gemini-3.1-flash-lite-preview" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
-              </div>
-              <div class="reader-menu-section">
-                <label for="geminiPromptInput"><strong>Prompt</strong></label>
-                <textarea id="geminiPromptInput" rows="5" placeholder="Escribe aquí el prompt base" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:150px;border-radius:18px;padding:12px 16px;">${escapeHtml(promptValue)}</textarea>
-                <div class="field-help">Al pulsar ? en una palabra, se concatena este prompt con la palabra del popup.</div>
-              </div>
-              <div class="reader-menu-section">
-                <h2 style="margin:0;">ChatGPT</h2>
-                <label for="chatgptWordPromptInput"><strong>Prompt popup de palabras</strong></label>
-                <textarea id="chatgptWordPromptInput" rows="3" placeholder="Prompt para palabra" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:110px;border-radius:18px;padding:12px 16px;">${escapeHtml(chatGptWordPromptValue)}</textarea>
-                <div class="field-help">Se concatena este prompt con la palabra seleccionada y se envía a ChatGPT.</div>
-                <label for="chatgptSentencePromptInput"><strong>Prompt modo frase</strong></label>
-                <textarea id="chatgptSentencePromptInput" rows="3" placeholder="Prompt para frase" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:110px;border-radius:18px;padding:12px 16px;">${escapeHtml(chatGptSentencePromptValue)}</textarea>
-                <div class="field-help">Se concatena este prompt con la frase actual y se envía a ChatGPT.</div>
-              </div>
-              <div class="library-actions-row">
-                <button id="saveGeminiConfigBtn" class="library-action-btn" type="button">Guardar</button>
-                <button id="clearGeminiConfigBtn" class="library-action-btn" type="button">Borrar</button>
-              </div>
+              </details>
+              <p class="status library-status">${escapeHtml(state.translationConfigStatus || (isTranslationsConfigured ? 'Configuración de Azure Translator lista.' : 'Añade tu clave y tu región para traducir oraciones en modo frase.'))}</p>
+              <details class="settings-collapsible">
+                <summary>
+                  <span>Gemini</span>
+                  <span class="chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="settings-collapsible-body">
+                  <label for="geminiApiKeyInput"><strong>Clave API</strong></label>
+                  <input id="geminiApiKeyInput" type="password" value="${escapeHtml(apiKeyValue)}" placeholder="Pega aquí tu clave" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                  <div class="field-help">Se guarda solo en la base de datos local del navegador.</div>
+                  <label for="geminiModelInput"><strong>Modelo</strong></label>
+                  <input id="geminiModelInput" type="text" value="${escapeHtml(modelValue)}" placeholder="gemini-3.1-flash-lite-preview" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:56px;border-radius:18px;padding:12px 16px;" />
+                  <label for="geminiPromptInput"><strong>Prompt</strong></label>
+                  <textarea id="geminiPromptInput" rows="5" placeholder="Escribe aquí el prompt base" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:150px;border-radius:18px;padding:12px 16px;">${escapeHtml(promptValue)}</textarea>
+                  <div class="field-help">Al pulsar ? en una palabra, se concatena este prompt con la palabra del popup.</div>
+                  <div class="library-actions-row">
+                    <button id="saveGeminiConfigBtn" class="library-action-btn" type="button">Guardar</button>
+                    <button id="clearGeminiConfigBtn" class="library-action-btn" type="button">Borrar</button>
+                  </div>
+                </div>
+              </details>
+              <details class="settings-collapsible">
+                <summary>
+                  <span>ChatGPT</span>
+                  <span class="chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="settings-collapsible-body">
+                  <label for="chatgptWordPromptInput"><strong>Prompt popup de palabras</strong></label>
+                  <textarea id="chatgptWordPromptInput" rows="3" placeholder="Prompt para palabra" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:110px;border-radius:18px;padding:12px 16px;">${escapeHtml(chatGptWordPromptValue)}</textarea>
+                  <div class="field-help">Se concatena este prompt con la palabra seleccionada y se envía a ChatGPT.</div>
+                  <label for="chatgptSentencePromptInput"><strong>Prompt modo frase</strong></label>
+                  <textarea id="chatgptSentencePromptInput" rows="3" placeholder="Prompt para frase" autocapitalize="off" autocomplete="off" spellcheck="false" style="min-height:110px;border-radius:18px;padding:12px 16px;">${escapeHtml(chatGptSentencePromptValue)}</textarea>
+                  <div class="field-help">Se concatena este prompt con la frase actual y se envía a ChatGPT.</div>
+                </div>
+              </details>
               <div class="reader-menu-section">
                 <h2 style="margin:0;">Acciones</h2>
                 <div class="library-actions-row">
@@ -5852,12 +5896,12 @@
                   <label for="settingsFontSizeInput"><strong>Tamaño de letra</strong></label>
                   <input id="settingsFontSizeInput" type="range" min="14" max="30" step="1" value="${state.settings.fontSize}" />
                   <div class="field-help">Tamaño actual: <span id="settingsFontSizeValue">${state.settings.fontSize}px</span></div>
-                  <div class="reader-level-settings">
-                    ${readerLevelRowsHtml}
-                  </div>
                   <div>
                     <strong>Vista previa</strong>
                     <div class="reader-level-preview">${readerPreviewTokensHtml}</div>
+                  </div>
+                  <div class="reader-level-settings">
+                    ${readerLevelRowsHtml}
                   </div>
                   <button id="resetReaderStylesBtn" class="library-action-btn" type="button">Restablecer estilos del tema actual</button>
                 </div>
