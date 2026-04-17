@@ -959,8 +959,8 @@
     .reader-footer-page {
       justify-self: start;
       align-self: center;
-      font-size: 0.9rem;
-      font-weight: 600;
+      font-size: 0.82rem;
+      font-weight: 400;
       color: var(--muted);
       white-space: nowrap;
     }
@@ -4370,7 +4370,7 @@
         const isCurrentSentence = activeSentenceIndex !== null && realSentenceIndex === activeSentenceIndex;
         return `<span class="page-sentence ${isCurrentSentence ? 'current-sentence' : ''}" data-section-index="${sectionIndex}" data-sentence-index="${realSentenceIndex}">${renderSegmentedSentence(payload, { segmented: state.settings.showSegmentation, inline: true })}</span>`;
       }).join('');
-      return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${paragraphsHtml || fallbackHtml}</div><div class="reader-page-footer">Pg ${footerPageInfo.globalPageCurrent}/${footerPageInfo.globalPageTotal}</div></div>`;
+      return `<div class="reader-page-frame" style="--reader-page-height:${context.pageHeight}px;"><div class="page-mode-text">${paragraphsHtml || fallbackHtml}</div></div>`;
     }
 
     function alignPageModeToCurrentSentence() {
